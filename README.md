@@ -109,10 +109,10 @@ For complete usage instructions, see our [Usage Guide](docs/usage.md).
 
 - [Installation Guide](docs/installation.md) - Detailed setup instructions
 - [Usage Guide](docs/usage.md) - Complete usage documentation
-- [API Reference](docs/api.md) - FastAPI endpoints and models
+- [API Reference](docs/api.md) - FastAPI endpoints and models COMING SOON
 - [Comparative Analysis Guide](docs/comparative_analysis.md) - Advanced comparison features
-- [Metrics Documentation](docs/metrics.md) - Available metrics and their meaning
-- [Contributing Guide](CONTRIBUTING.md) - How to contribute to the project
+- [Metrics Documentation](docs/metrics_explanation.md) - Available metrics and their meaning
+- [Contributing Guide](CONTRIBUTING.md) - How to contribute to the project COMING SOON
 
 ## Architecture
 
