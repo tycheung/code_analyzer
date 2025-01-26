@@ -1,6 +1,6 @@
 # Code Quality Analyzer
 
-A comprehensive tool for analyzing code quality, complexity, and maintainability of GitHub repositories, powered by FastAPI and modern Python async capabilities.
+A tool for analyzing code quality, complexity, and maintainability of GitHub repositories, powered by FastAPI and modern Python async capabilities. Currently only tested on a Windows machine, but should work on other platforms.
 
 ## Features
 
