@@ -1,18 +1,20 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
+from pathlib import Path
 from datetime import datetime
 import tempfile
 import logging
 import os
 import json
 import uvicorn
-from pathlib import Path
 
-from ..analyzers import CodebaseAnalyzer
-from ..reporters import PDFReportGenerator
+from code_analyzer.analyzers import CodebaseAnalyzer
+from code_analyzer.reporters import PDFReportGenerator
 
 # Configure logging
 logging.basicConfig(
@@ -35,6 +37,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount static files directory
+static_dir = Path(__file__).parent / 'static'
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # Pydantic models for request validation
 class ComparisonOptions(BaseModel):
@@ -279,6 +285,14 @@ async def download_file(file_path: str):
         )
     raise HTTPException(status_code=404, detail="File not found")
 
+@app.get("/", response_class=HTMLResponse)
+async def read_root():
+    """Serve the index.html page."""
+    index_path = static_dir / 'index.html'
+    if index_path.exists():
+        return HTMLResponse(content=index_path.read_text(), status_code=200)
+    raise HTTPException(status_code=404, detail="Index page not found")
+
 def run_server(port: int = 8000, open_browser: bool = True):
     """Run the FastAPI server."""
     if open_browser:
@@ -286,6 +300,3 @@ def run_server(port: int = 8000, open_browser: bool = True):
         webbrowser.open(f"http://localhost:{port}")
     
     uvicorn.run(app, host="0.0.0.0", port=port)
-
-if __name__ == "__main__":
-    run_server()
