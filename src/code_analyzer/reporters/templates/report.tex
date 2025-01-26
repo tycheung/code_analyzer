@@ -1,0 +1,165 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[a4paper, margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}  % Fix compatibility warning
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+
+% Custom colors
+\definecolor{light-gray}{gray}{0.95}
+\definecolor{medium-gray}{gray}{0.85}
+\definecolor{primary}{RGB}{70,130,180}
+\definecolor{warning}{RGB}{255,140,0}
+\definecolor{critical}{RGB}{220,20,60}
+
+% Code listing style
+\lstset{
+    backgroundcolor=\color{light-gray},
+    basicstyle=\small\ttfamily,
+    breaklines=true,
+    captionpos=b,
+    commentstyle=\color{gray},
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    showstringspaces=false,
+    keywordstyle=\color{primary},
+}
+
+% Page style
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Code Analysis Report}
+\lhead{\today}
+\rfoot{Page \thepage}
+
+\begin{document}
+
+\begin{titlepage}
+    \begin{center}
+        \vspace*{2cm}
+        
+        \Huge
+        \textbf{Code Analysis Report}
+        
+        \vspace{1.5cm}
+        
+        \Large
+        ${REPOSITORY_NAME}
+        
+        \vspace{1.5cm}
+        
+        \includegraphics[width=0.4\textwidth]{charts/complexity_dist.png}
+        
+        \vspace{1.5cm}
+        
+        \large
+        Generated on \today
+        
+        \vfill
+        
+        \textbf{Repository URL:}\\
+        \url{${REPOSITORY_URL}}
+    \end{center}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\section{Executive Summary}
+\subsection{Key Metrics}
+\begin{itemize}
+    \item Total Lines of Code: ${TOTAL_LOC}
+    \item Number of Files: ${TOTAL_FILES}
+    \item Primary Languages: ${PRIMARY_LANGUAGES}
+    \item Overall Maintainability Score: ${MAINTAINABILITY_SCORE}/100
+\end{itemize}
+
+\subsection{Key Findings}
+\begin{itemize}
+${KEY_FINDINGS}
+\end{itemize}
+
+\section{Detailed Analysis}
+\subsection{Code Size and Structure}
+\begin{table}[h]
+    \centering
+    \begin{tabular}{lrr}
+        \toprule
+        \textbf{Metric} & \textbf{Count} & \textbf{Percentage} \\
+        \midrule
+        ${SIZE_METRICS_TABLE} \\
+        \bottomrule
+    \end{tabular}
+    \caption{Code Size Metrics}
+\end{table}
+
+\subsection{Complexity Analysis}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{charts/complexity_dist.png}
+    \caption{Distribution of Cyclomatic Complexity Across Files}
+\end{figure}
+
+\subsection{Maintainability Distribution}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{charts/maintainability_pie.png}
+    \caption{Distribution of Maintainability Index}
+\end{figure}
+
+\subsection{Security Analysis}
+\begin{itemize}
+${SECURITY_FINDINGS}
+\end{itemize}
+
+\subsection{Code Duplication}
+${DUPLICATION_ANALYSIS}
+
+\subsection{Change Risk Analysis}
+\begin{table}[h]
+    \centering
+    \begin{tabular}{lrr}
+        \toprule
+        \textbf{File} & \textbf{Risk Score} & \textbf{Change Frequency} \\
+        \midrule
+        ${RISK_ANALYSIS_TABLE} \\
+        \bottomrule
+    \end{tabular}
+    \caption{High-Risk Files}
+\end{table}
+
+\section{Recommendations}
+${RECOMMENDATIONS}
+
+\section{Detailed Metrics}
+${DETAILED_METRICS}
+
+\section{Appendix}
+\subsection{Analysis Methodology}
+This report was generated using automated code analysis tools that examine:
+\begin{itemize}
+    \item Static code analysis
+    \item Complexity metrics
+    \item Security patterns
+    \item Git history
+    \item Dependency graphs
+    \item Code duplication
+    \item Architecture patterns
+\end{itemize}
+
+Each metric is calculated using industry-standard algorithms and thresholds:
+\begin{itemize}
+    \item Cyclomatic Complexity: McCabe metric
+    \item Maintainability Index: SEI method
+    \item Security Patterns: OWASP guidelines
+    \item Code Duplication: Normalized token comparison
+\end{itemize}
+
+\end{document}

@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Quality Analyzer</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --error-color: #e74c3c;
+            --bg-color: #f5f6fa;
+            --border-color: #ddd;
+            --text-color: #333;
+            --light-bg: #f8f9fa;
+            --shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+        }
+
+        h1, h2, h3 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+
+<style>
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="date"],
+        select,
+        .form-select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        input[type="date"]:focus,
+        select:focus,
+        .form-select:focus {
+            outline: none;
+            border-color: var(--secondary-color);
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+
+        /* Grid Layouts */
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .checkbox-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 0.5rem;
+        }
+
+        /* Checkbox Groups */
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 0;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            margin-bottom: 0;
+            cursor: pointer;
+        }
+
+        /* Buttons */
+        button {
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        .download-btn {
+            background-color: var(--success-color);
+            padding: 8px 16px;
+        }
+
+        .download-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+    </style>
+
+    <style>
+        /* Comparison Sections */
+        .comparison-section {
+            margin-top: 1rem;
+            padding: 1rem;
+            background-color: var(--light-bg);
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .comparison-type {
+            margin-bottom: 1rem;
+        }
+
+        .comparison-results {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 4px;
+            box-shadow: var(--shadow);
+        }
+
+        /* Output Sections */
+        .output-section {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: var(--light-bg);
+            border-radius: 4px;
+            display: none;
+        }
+
+        .output-section.visible {
+            display: block;
+        }
+
+        .progress {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: var(--light-bg);
+            display: none;
+        }
+
+        .progress.visible {
+            display: block;
+        }
+
+        /* Log Output */
+        .log-output {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: var(--primary-color);
+            color: #ecf0f1;
+            border-radius: 4px;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+            line-height: 1.4;
+        }
+
+        .log-output.visible {
+            display: block;
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            display: none;
+        }
+
+        .alert.error {
+            background-color: var(--error-color);
+            color: white;
+            display: block;
+        }
+
+        .alert.success {
+            background-color: var(--success-color);
+            color: white;
+            display: block;
+        }
+
+        /* Comparison Results Visualization */
+        .metric-comparison {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .metric-card {
+            padding: 1rem;
+            background: white;
+            border-radius: 4px;
+            box-shadow: var(--shadow);
+        }
+
+        .metric-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .metric-change {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .change-positive {
+            color: var(--success-color);
+        }
+
+        .change-negative {
+            color: var(--error-color);
+        }
+
+        /* Charts Container */
+        .charts-container {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: white;
+            border-radius: 4px;
+            box-shadow: var(--shadow);
+        }
+
+        .chart {
+            width: 100%;
+            height: 400px;
+            margin-top: 1rem;
+        }
+    </style>
+
+    <body>
+    <div class="container">
+        <h1>Code Quality Analyzer</h1>
+        
+        <!-- Basic Repository Settings -->
+        <div class="form-group">
+            <label for="repo-url">GitHub Repository URL</label>
+            <input type="text" id="repo-url" placeholder="https://github.com/username/repository">
+        </div>
+
+        <div class="options-grid">
+            <div class="form-group">
+                <label for="output-dir">Output Directory</label>
+                <input type="text" id="output-dir" value="./repo_clone">
+            </div>
+
+            <div class="form-group">
+                <label for="min-lines">Minimum Duplicate Lines</label>
+                <input type="number" id="min-lines" value="6" min="3">
+            </div>
+        </div>
+
+        <div class="options-grid">
+            <div class="checkbox-group">
+                <input type="checkbox" id="generate-pdf" checked>
+                <label for="generate-pdf">Generate PDF Report</label>
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="export-json" checked>
+                <label for="export-json">Export JSON Metrics</label>
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="verbose">
+                <label for="verbose">Verbose Output</label>
+            </div>
+        </div>
+
+        <!-- Comparative Analysis Section -->
+        <div class="form-group">
+            <h3>Comparative Analysis</h3>
+            <div class="options-grid">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="enable-comparison">
+                    <label for="enable-comparison">Enable Comparative Analysis</label>
+                </div>
+            </div>
+
+            <div id="comparison-options" style="display: none;">
+                <div class="comparison-type">
+                    <label>Analysis Type:</label>
+                    <select id="comparison-type" class="form-select">
+                        <option value="directory">Directory Comparison</option>
+                        <option value="snapshot">Before/After Comparison</option>
+                        <option value="historical">Historical Trend Analysis</option>
+                    </select>
+                </div>
+
+                <!-- Directory Comparison Options -->
+                <div id="directory-options" class="comparison-section">
+                    <div class="form-group">
+                        <label for="dir1-path">First Directory Path:</label>
+                        <input type="text" id="dir1-path" placeholder="src/module1">
+                        <small class="form-text">Relative path from repository root</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="dir2-path">Second Directory Path:</label>
+                        <input type="text" id="dir2-path" placeholder="src/module2">
+                        <small class="form-text">Relative path from repository root</small>
+                    </div>
+                </div>
+
+                <!-- Snapshot Comparison Options -->
+                <div id="snapshot-options" class="comparison-section" style="display: none;">
+                    <div class="form-group">
+                        <label for="baseline-ref">Baseline Reference:</label>
+                        <input type="text" id="baseline-ref" placeholder="main~1 or v1.0.0">
+                        <small class="form-text">Git reference (commit, tag, or branch)</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="target-ref">Target Reference:</label>
+                        <input type="text" id="target-ref" placeholder="main or feature-branch">
+                        <small class="form-text">Git reference to compare against baseline</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="component-path">Component Path (optional):</label>
+                        <input type="text" id="component-path" placeholder="src/component">
+                        <small class="form-text">Limit analysis to specific directory</small>
+                    </div>
+                </div>
+
+                <!-- Historical Analysis Options -->
+                <div id="historical-options" class="comparison-section" style="display: none;">
+                    <div class="form-group">
+                        <label for="start-date">Start Date:</label>
+                        <input type="date" id="start-date">
+                    </div>
+                    <div class="form-group">
+                        <label for="end-date">End Date:</label>
+                        <input type="date" id="end-date">
+                    </div>
+                    <div class="form-group">
+                        <label for="trend-component">Component Path (optional):</label>
+                        <input type="text" id="trend-component" placeholder="src/component">
+                        <small class="form-text">Limit trend analysis to specific directory</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="interval">Analysis Interval:</label>
+                        <select id="interval" class="form-select">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                            <option value="commit">Per Commit</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Metric Selection -->
+                <div class="form-group">
+                    <label>Metrics to Compare:</label>
+                    <div class="checkbox-grid">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="compare-complexity" checked>
+                            <label for="compare-complexity">Complexity Metrics</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="compare-security" checked>
+                            <label for="compare-security">Security Metrics</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="compare-architecture" checked>
+                            <label for="compare-architecture">Architecture Metrics</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="compare-maintainability" checked>
+                            <label for="compare-maintainability">Maintainability Metrics</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analysis Button -->
+        <button id="analyze-btn" onclick="startAnalysis()">Analyze Repository</button>
+
+        <!-- Alert Section -->
+        <div id="alert" class="alert"></div>
+
+        <!-- Progress Section -->
+        <div id="progress" class="progress">
+            <div id="progress-text">Analyzing repository...</div>
+            <div id="progress-detail"></div>
+        </div>
+
+        <!-- Log Output -->
+        <div id="log-output" class="log-output"></div>
+
+        <!-- Results Section -->
+        <div id="output-section" class="output-section">
+            <h2>Analysis Results</h2>
+            
+            <!-- Comparison Results (if enabled) -->
+            <div id="comparison-results" style="display: none;">
+                <h3>Comparative Analysis Results</h3>
+                <div class="metric-comparison" id="metric-comparison-grid">
+                    <!-- Metrics cards will be inserted here -->
+                </div>
+                
+                <div class="charts-container">
+                    <h4>Metrics Visualization</h4>
+                    <div id="metrics-chart" class="chart"></div>
+                </div>
+            </div>
+
+            <!-- Download Options -->
+            <div class="download-buttons">
+                <button class="download-btn" onclick="downloadPDF()">Download PDF Report</button>
+                <button class="download-btn" onclick="downloadJSON()">Download JSON Metrics</button>
+                <button class="download-btn" onclick="downloadLog()">Download Log</button>
+                <button class="download-btn" id="download-comparison" 
+                        onclick="downloadComparison()" style="display: none">
+                    Download Comparison Report
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let logContent = [];
+        let analysisData = null;
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `[${timestamp}] ${message}`;
+            logContent.push(logMessage);
+            
+            const logOutput = document.getElementById('log-output');
+            logOutput.textContent = logContent.join('\n');
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+
+        function showAlert(message, type) {
+            const alert = document.getElementById('alert');
+            alert.textContent = message;
+            alert.className = `alert ${type}`;
+            setTimeout(() => {
+                alert.className = 'alert';
+            }, 5000);
+        }
+
+        function updateProgress(detail) {
+            const progressDetail = document.getElementById('progress-detail');
+            if (progressDetail) {
+                progressDetail.textContent = detail;
+            }
+        }
+
+        async function startAnalysis() {
+            const repoUrl = document.getElementById('repo-url').value;
+            if (!repoUrl) {
+                showAlert('Please enter a repository URL', 'error');
+                return;
+            }
+
+            const analyzeBtn = document.getElementById('analyze-btn');
+            const progress = document.getElementById('progress');
+            const logOutput = document.getElementById('log-output');
+            const outputSection = document.getElementById('output-section');
+            const comparisonResults = document.getElementById('comparison-results');
+
+            // Reset UI
+            analyzeBtn.disabled = true;
+            progress.className = 'progress visible';
+            logOutput.className = 'log-output visible';
+            outputSection.className = 'output-section';
+            comparisonResults.style.display = 'none';
+            document.getElementById('download-comparison').style.display = 'none';
+            logContent = [];
+
+            // Collect analysis options
+            const options = {
+                outputDir: document.getElementById('output-dir').value,
+                minLines: parseInt(document.getElementById('min-lines').value),
+                generatePdf: document.getElementById('generate-pdf').checked,
+                exportJson: document.getElementById('export-json').checked,
+                verbose: document.getElementById('verbose').checked,
+                comparison: collectComparisonOptions()
+            };
+
+            try {
+                log('Starting analysis...');
+                log(`Repository: ${repoUrl}`);
+                log(`Options: ${JSON.stringify(options, null, 2)}`);
+
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        repoUrl: repoUrl,
+                        options: options
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Analysis failed: ${response.statusText}`);
+                }
+
+                analysisData = await response.json();
+                
+                // Show results
+                outputSection.className = 'output-section visible';
+                
+                // Handle comparison results if present
+                if (analysisData.comparison) {
+                    displayComparisonResults(analysisData.comparison);
+                    document.getElementById('download-comparison').style.display = 'block';
+                }
+
+                showAlert('Analysis completed successfully!', 'success');
+                log('Analysis complete! You can now download the reports.');
+                
+            } catch (error) {
+                showAlert(error.message, 'error');
+                log(`Error: ${error.message}`);
+            } finally {
+                analyzeBtn.disabled = false;
+                progress.className = 'progress';
+            }
+        }
+
+        function collectComparisonOptions() {
+            const enableComparison = document.getElementById('enable-comparison').checked;
+            if (!enableComparison) return null;
+
+            const comparisonType = document.getElementById('comparison-type').value;
+            const metrics = [];
+            
+            // Collect selected metrics
+            if (document.getElementById('compare-complexity').checked) metrics.push('complexity');
+            if (document.getElementById('compare-security').checked) metrics.push('security');
+            if (document.getElementById('compare-architecture').checked) metrics.push('architecture');
+            if (document.getElementById('compare-maintainability').checked) metrics.push('maintainability');
+
+            let options = {
+                enabled: true,
+                type: comparisonType,
+                metrics: metrics
+            };
+
+            // Add type-specific options
+            switch (comparisonType) {
+                case 'directory':
+                    options.options = {
+                        dir1: document.getElementById('dir1-path').value,
+                        dir2: document.getElementById('dir2-path').value
+                    };
+                    break;
+                    
+                case 'snapshot':
+                    options.options = {
+                        baseline: document.getElementById('baseline-ref').value,
+                        target: document.getElementById('target-ref').value,
+                        component: document.getElementById('component-path').value
+                    };
+                    break;
+                    
+                case 'historical':
+                    options.options = {
+                        startDate: document.getElementById('start-date').value,
+                        endDate: document.getElementById('end-date').value,
+                        component: document.getElementById('trend-component').value,
+                        interval: document.getElementById('interval').value
+                    };
+                    break;
+            }
+
+            return options;
+        }
+
+        function displayComparisonResults(comparison) {
+            const comparisonResults = document.getElementById('comparison-results');
+            const metricGrid = document.getElementById('metric-comparison-grid');
+            
+            // Clear previous results
+            metricGrid.innerHTML = '';
+            
+            // Create metric cards based on comparison type
+            switch (comparison.type) {
+                case 'directory':
+                    displayDirectoryComparison(comparison, metricGrid);
+                    break;
+                case 'snapshot':
+                    displaySnapshotComparison(comparison, metricGrid);
+                    break;
+                case 'historical':
+                    displayHistoricalTrends(comparison, metricGrid);
+                    break;
+            }
+            
+            comparisonResults.style.display = 'block';
+            
+            // Create visualizations
+            createComparisonCharts(comparison);
+        }
+
+        function displayDirectoryComparison(comparison, container) {
+            const metrics = ['complexity', 'security', 'maintainability'];
+            
+            metrics.forEach(metric => {
+                if (!comparison.differences[metric]) return;
+                
+                const card = document.createElement('div');
+                card.className = 'metric-card';
+                
+                const diff = comparison.differences[metric];
+                const changeClass = diff > 0 ? 'change-positive' : 'change-negative';
+                const changeIcon = diff > 0 ? '↑' : '↓';
+                
+                card.innerHTML = `
+                    <div class="metric-header">
+                        <span>${metric.charAt(0).toUpperCase() + metric.slice(1)}</span>
+                        <span class="metric-change ${changeClass}">
+                            ${Math.abs(diff).toFixed(2)} ${changeIcon}
+                        </span>
+                    </div>
+                    <div class="metric-details">
+                        <div>Dir 1: ${comparison.dir1.metrics[metric]}</div>
+                        <div>Dir 2: ${comparison.dir2.metrics[metric]}</div>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+
+        function displaySnapshotComparison(comparison, container) {
+            Object.entries(comparison.differences).forEach(([metric, diff]) => {
+                const card = document.createElement('div');
+                card.className = 'metric-card';
+                
+                const changeClass = diff > 0 ? 'change-positive' : 'change-negative';
+                const changeIcon = diff > 0 ? '↑' : '↓';
+                
+                card.innerHTML = `
+                    <div class="metric-header">
+                        <span>${metric.charAt(0).toUpperCase() + metric.slice(1)}</span>
+                        <span class="metric-change ${changeClass}">
+                            ${Math.abs(diff).toFixed(2)} ${changeIcon}
+                        </span>
+                    </div>
+                    <div class="metric-details">
+                        <div>Baseline: ${comparison.baseline.metrics[metric]}</div>
+                        <div>Target: ${comparison.target.metrics[metric]}</div>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+
+        function displayHistoricalTrends(comparison, container) {
+            // Create summary cards for overall trends
+            const metrics = Object.keys(comparison.metrics);
+            
+            metrics.forEach(metric => {
+                const values = comparison.metrics[metric];
+                const trend = calculateTrend(values);
+                
+                const card = document.createElement('div');
+                card.className = 'metric-card';
+                
+                const changeClass = trend > 0 ? 'change-positive' : 'change-negative';
+                const changeIcon = trend > 0 ? '↑' : '↓';
+                
+                card.innerHTML = `
+                    <div class="metric-header">
+                        <span>${metric.charAt(0).toUpperCase() + metric.slice(1)}</span>
+                        <span class="metric-change ${changeClass}">
+                            ${Math.abs(trend).toFixed(2)}% ${changeIcon}
+                        </span>
+                    </div>
+                    <div class="metric-details">
+                        <div>Start: ${values[0]}</div>
+                        <div>End: ${values[values.length - 1]}</div>
+                        <div>Average: ${(values.reduce((a, b) => a + b) / values.length).toFixed(2)}</div>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+
+        function createComparisonCharts(comparison) {
+            const chartContainer = document.getElementById('metrics-chart');
+            
+            // Clear previous charts
+            chartContainer.innerHTML = '';
+            
+            switch (comparison.type) {
+                case 'directory':
+                    createDirectoryChart(comparison, chartContainer);
+                    break;
+                case 'snapshot':
+                    createSnapshotChart(comparison, chartContainer);
+                    break;
+                case 'historical':
+                    createTrendChart(comparison, chartContainer);
+                    break;
+            }
+        }
+
+        function createDirectoryChart(comparison, container) {
+            const canvas = document.createElement('canvas');
+            container.appendChild(canvas);
+            
+            const ctx = canvas.getContext('2d');
+            const metrics = Object.keys(comparison.differences);
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: metrics,
+                    datasets: [
+                        {
+                            label: comparison.dir1.path,
+                            data: metrics.map(m => comparison.dir1.metrics[m]),
+                            backgroundColor: 'rgba(52, 152, 219, 0.5)'
+                        },
+                        {
+                            label: comparison.dir2.path,
+                            data: metrics.map(m => comparison.dir2.metrics[m]),
+                            backgroundColor: 'rgba(46, 204, 113, 0.5)'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function createSnapshotChart(comparison, container) {
+            const canvas = document.createElement('canvas');
+            container.appendChild(canvas);
+            
+            const ctx = canvas.getContext('2d');
+            const metrics = Object.keys(comparison.differences);
+            
+            new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: metrics,
+                    datasets: [
+                        {
+                            label: 'Baseline',
+                            data: metrics.map(m => comparison.baseline.metrics[m]),
+                            backgroundColor: 'rgba(52, 152, 219, 0.2)',
+                            borderColor: 'rgba(52, 152, 219, 1)',
+                            pointBackgroundColor: 'rgba(52, 152, 219, 1)'
+                        },
+                        {
+                            label: 'Target',
+                            data: metrics.map(m => comparison.target.metrics[m]),
+                            backgroundColor: 'rgba(46, 204, 113, 0.2)',
+                            borderColor: 'rgba(46, 204, 113, 1)',
+                            pointBackgroundColor: 'rgba(46, 204, 113, 1)'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    elements: {
+                        line: {
+                            borderWidth: 3
+                        }
+                    }
+                }
+            });
+        }
+
+        function createTrendChart(comparison, container) {
+            const canvas = document.createElement('canvas');
+            container.appendChild(canvas);
+            
+            const ctx = canvas.getContext('2d');
+            const metrics = Object.keys(comparison.metrics);
+            
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: comparison.timeline,
+                    datasets: metrics.map(metric => ({
+                        label: metric,
+                        data: comparison.metrics[metric],
+                        borderColor: getMetricColor(metric),
+                        fill: false,
+                        tension: 0.1
+                    }))
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: comparison.options.interval
+                            }
+                        },
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function getMetricColor(metric) {
+            const colors = {
+                complexity: 'rgba(231, 76, 60, 1)',
+                security: 'rgba(241, 196, 15, 1)',
+                maintainability: 'rgba(46, 204, 113, 1)',
+                architecture: 'rgba(52, 152, 219, 1)'
+            };
+            return colors[metric] || 'rgba(149, 165, 166, 1)';
+        }
+
+        function calculateTrend(values) {
+            const first = values[0];
+            const last = values[values.length - 1];
+            return ((last - first) / first) * 100;
+        }
+
+        async function downloadPDF() {
+            if (!analysisData || !analysisData.pdfPath) {
+                showAlert('PDF report not available', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/download/${analysisData.pdfPath}`);
+                if (!response.ok) throw new Error('Failed to download PDF');
+                
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'code_analysis_report.pdf';
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                showAlert('Failed to download PDF report', 'error');
+                log(`Download error: ${error.message}`);
+            }
+        }
+
+        async function downloadJSON() {
+            if (!analysisData || !analysisData.jsonPath) {
+                showAlert('JSON metrics not available', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/download/${analysisData.jsonPath}`);
+                if (!response.ok) throw new Error('Failed to download JSON');
+                
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'code_metrics.json';
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                showAlert('Failed to download JSON metrics', 'error');
+                log(`Download error: ${error.message}`);
+            }
+        }
+
+        async function downloadComparison() {
+            if (!analysisData || !analysisData.comparisonReportPath) {
+                showAlert('Comparison report not available', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/download/${analysisData.comparisonReportPath}`);
+                if (!response.ok) throw new Error('Failed to download comparison report');
+                
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'comparison_report.json';
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                showAlert('Failed to download comparison report', 'error');
+                log(`Download error: ${error.message}`);
+            }
+        }
+
+        async function downloadLog() {
+            const blob = new Blob([logContent.join('\n')], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'analysis.log';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Comparison type selection handler
+            document.getElementById('comparison-type').addEventListener('change', function() {
+                document.querySelectorAll('.comparison-section').forEach(section => {
+                    section.style.display = 'none';
+                });
+                const selectedType = this.value;
+                document.getElementById(`${selectedType}-options`).style.display = 'block';
+            });
+
+            // Comparison enable/disable handler
+            document.getElementById('enable-comparison').addEventListener('change', function() {
+                document.getElementById('comparison-options').style.display = 
+                    this.checked ? 'block' : 'none';
+            });
+
+            // Set default date values for historical analysis
+            const today = new Date();
+            const lastMonth = new Date();
+            lastMonth.setMonth(lastMonth.getMonth() - 1);
+            
+            document.getElementById('start-date').value = lastMonth.toISOString().split('T')[0];
+            document.getElementById('end-date').value = today.toISOString().split('T')[0];
+        });
+    </script>
+</body>
+</html>

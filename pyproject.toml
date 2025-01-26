@@ -1,0 +1,82 @@
+[tool.poetry]
+name = "code-quality-analyzer"
+version = "0.1.0"
+description = "A comprehensive tool for analyzing code quality and complexity"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "code_analyzer", from = "src"}]
+license = "MIT"
+repository = "https://github.com/yourusername/code-quality-analyzer"
+documentation = "https://github.com/yourusername/code-quality-analyzer/tree/main/docs"
+keywords = ["code-quality", "static-analysis", "metrics", "complexity"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Quality Assurance",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12"
+]
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.13"
+GitPython = "^3.1.0"
+matplotlib = "^3.8.4"
+seaborn = "^0.13.2"
+Jinja2 = "^3.1.2"
+numpy = "^1.25.0"
+pandas = "^1.5.3"
+fastapi = "0.115.7"
+aiohttp = {version = "^3.8.5", optional = true}
+aiofiles = {version = "^23.1.0", optional = true}
+PyLaTeX = "^1.4.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.2"
+pytest-cov = "^4.1.0"
+black = "^23.9.1"
+flake8 = "^6.1.0"
+mypy = "^1.5.1"
+pre-commit = "^3.5.2"
+
+[tool.poetry.group.docs.dependencies]
+sphinx = "^7.2.5"
+sphinx-rtd-theme = "^1.2.2"
+
+[tool.poetry.extras]
+web = ["aiohttp", "aiofiles"]
+pdf = ["PyLaTeX"]
+all = ["aiohttp", "aiofiles", "PyLaTeX"]
+
+[tool.poetry.scripts]
+code_analyzer = "code_analyzer.main:main"
+code_analyzer-web = "code_analyzer.web.__main__:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+markers = [
+    "integration: mark test as an integration test",
+    "latex: mark test as requiring LaTeX installation",
+    "git: mark test as requiring Git installation",
+    "slow: mark test as slow (takes more than 1 second)"
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
