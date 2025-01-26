@@ -225,5 +225,5 @@ Current version: 0.1.0
 ## Support
 
 - Open an issue on GitHub
-- Check our [FAQ](docs/faq.md)
-- Read the [Troubleshooting Guide](docs/troubleshooting.md)
+- Check our [FAQ](docs/faq.md) COMING SOON
+- Read the [Troubleshooting Guide](docs/troubleshooting.md) COMING SOON
