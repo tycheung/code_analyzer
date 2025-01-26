@@ -156,7 +156,7 @@ jobs:
              poetry run python ci/analyze.py
 ```
 
-For more integration examples, see our [CI/CD Guide](docs/ci_cd.md).
+For more integration examples, see our [CI/CD Guide](docs/ci_cd.md) COMING SOON.
 
 ## Development
 
