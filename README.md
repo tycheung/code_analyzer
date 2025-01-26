@@ -189,7 +189,7 @@ poetry run pytest --cov=code_analyzer
 poetry run pytest -m "not integration"
 ```
 
-## Contributing
+## Contributing COMING SOON
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
 
