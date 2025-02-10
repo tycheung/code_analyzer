@@ -1,1153 +1,1712 @@
-from typing import Dict, Any, List
-import os
-from datetime import datetime, time
-from pathlib import Path
-import numpy as np
-import matplotlib.pyplot as plt
-from pylatex import (
-    Document, Section, Subsection, Tabular, Math, TikZ, Axis, Plot, Figure,
-    Package, Command, NoEscape, Center
-)
-from pylatex.utils import bold, italic
-from ..models.metrics import (
-    DeploymentWindow, ResourceAllocation, RollbackPrediction, 
-    IncidentPrediction, CodeMetrics
-)
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import PageBreak, Image, ListFlowable, ListItem
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics.charts.linecharts import HorizontalLineChart
+from reportlab.graphics.charts.piecharts import Pie
+from reportlab.graphics.charts.barcharts import VerticalBarChart
+import datetime
+import math
 
-class PDFReportGenerator:
-    """Generates comprehensive PDF reports from code analysis metrics using PyLaTeX."""
+class CodeMetricsPDFGenerator:
+    """Generates comprehensive PDF reports for code analysis metrics."""
     
-    def __init__(self, template_dir: str = None, ml_system = None):
-        """Initialize the PDF report generator.
-        
-        Args:
-            template_dir: Optional directory containing additional resources.
-                        Defaults to 'templates' subdirectory.
-            ml_system: Optional ML system for deployment predictions.
-        """
-        if template_dir is None:
-            template_dir = os.path.join(os.path.dirname(__file__), 'templates')
-            
-        self.template_dir = template_dir
-        self.ml_system = ml_system
-        
-        # Document settings
-        self.geometry_options = {
-            "margin": "1in",
-            "headheight": "40pt",
-            "footskip": "30pt"
-        }
-        
-        # Color definitions
-        self.colors = {
-            'light-gray': 'gray!95',
-            'medium-gray': 'gray!85',
-            'primary': 'rgb:70,130,180',
-            'warning': 'rgb:255,140,0',
-            'critical': 'rgb:220,20,60',
-            'success': 'rgb:46,139,87'
-        }
-        
-        # Additional packages needed
-        self.packages = [
-            'inputenc',
-            'geometry',
-            'graphicx',
-            'booktabs',
-            'xcolor',
-            'tikz',
-            'pgfplots',
-            'listings',
-            'hyperref',
-            'fancyhdr'
-        ]
-
-    def prepare_metrics_data(self, stats: Dict[str, CodeMetrics]) -> Dict[str, Any]:
-        """Prepare metrics data for the report."""
-        data = {
-            'TOTAL_LOC': str(sum(m.lines_code for m in stats.values())),
-            'TOTAL_FILES': str(len(stats)),
-            'PRIMARY_LANGUAGES': self._get_primary_languages(stats),
-            'MAINTAINABILITY_SCORE': f"{self._calculate_maintainability_score(stats):.1f}",
-            'KEY_FINDINGS': self._generate_key_findings(stats),
-            'SIZE_METRICS_TABLE': self._generate_size_table(stats),
-            'SECURITY_FINDINGS': self._generate_security_findings(stats),
-            'DUPLICATION_ANALYSIS': self._generate_duplication_analysis(stats),
-            'RISK_ANALYSIS_TABLE': self._generate_risk_table(stats),
-            'RECOMMENDATIONS': self._generate_recommendations(stats),
-            'DETAILED_METRICS': self._generate_detailed_metrics(stats)
-        }
-        
-        # Add ML analysis if available
-        if self.ml_system:
-            team_availability = self._get_team_availability()
-            try:
-                ml_analysis = self.ml_system.analyze_deployment(stats, team_availability)
-                ml_data = self._prepare_ml_data(stats)
-                data.update(ml_data)
-            except Exception as e:
-                print(f"Warning: ML analysis failed: {str(e)}")
-                data.update(self._prepare_ml_error_data({}))
-        
-        return data
-
-    def generate_pdf(self, stats: Dict[str, CodeMetrics], repo_url: str, output_dir: str) -> None:
-        """Generate the PDF report using PyLaTeX."""
-        output_dir = os.path.abspath(output_dir)
-        os.makedirs(output_dir, exist_ok=True)
+    def __init__(self, output_path: str, pagesize=A4):
+        self.output_path = output_path
+        self.pagesize = pagesize
+        self.styles = getSampleStyleSheet()
+        self._setup_custom_styles()
         
         # Initialize document
-        doc = Document(documentclass='article')
+        self.doc = SimpleDocTemplate(
+            output_path,
+            pagesize=pagesize,
+            rightMargin=72,
+            leftMargin=72,
+            topMargin=72,
+            bottomMargin=72
+        )
         
-        # Add packages and setup before any content
-        self._setup_document(doc)
+        # Story will contain all flowables
+        self.story = []
         
-        # Generate charts before content
-        print("Generating charts...")
-        chart_paths = self.generate_charts(stats, output_dir)
+        # Define colors for charts and tables
+        self.colors = {
+            'primary': colors.HexColor('#1f77b4'),
+            'secondary': colors.HexColor('#ff7f0e'),
+            'danger': colors.HexColor('#d62728'),
+            'success': colors.HexColor('#2ca02c'),
+            'warning': colors.HexColor('#ffeb3b'),
+            'info': colors.HexColor('#17a2b8'),
+            'background': colors.HexColor('#f8f9fa'),
+            'text': colors.HexColor('#212529')
+        }
         
-        # Prepare metrics data
-        print("Preparing metrics data...")
-        data = self.prepare_metrics_data(stats)
-        data.update(chart_paths)
-        data['REPOSITORY_URL'] = repo_url
-        data['REPOSITORY_NAME'] = Path(repo_url).name
-
-        # Start the document
-        print("Generating report content...")
-        
-        # Title page
-        with doc.create(Section('Code Analysis Report')):
-            doc.append(NoEscape(r'\large\textbf{Repository URL:} ' + repo_url))
-            doc.append(NoEscape(r'\vspace{1cm}'))
-            
-            if 'COMPLEXITY_CHART' in data:
-                with doc.create(Center()):
-                    with doc.create(Figure()) as fig:
-                        fig.add_image(data['COMPLEXITY_CHART'], width=NoEscape('0.4\\textwidth'))
-            
-            doc.append(NoEscape(r'\vspace{1cm}'))
-            
-            doc.append(NoEscape(r'\large Generated on \today'))
-        
-        # Add content sections
-        self._add_executive_summary(doc, data)
-        self._add_detailed_analysis(doc, data)
-        self._add_deployment_impact_analysis(doc, data)
-        self._add_recommendations_section(doc, data)
-        self._add_detailed_metrics_section(doc, data)
-        self._add_appendix(doc)
-        
-        # Generate PDF
-        print("Compiling PDF...")
-        try:
-            os.chdir(output_dir)  # Change to output directory for compilation
-            doc.generate_pdf(
-                'report',
-                clean_tex=False,
-                compiler='pdflatex',
-                compiler_args=[
-                    '-interaction=nonstopmode',
-                    '-halt-on-error'
-                ]
-            )
-            print(f"\nPDF report generated: {output_dir}/report.pdf")
-            
-        except Exception as e:
-            print("\nError generating PDF:", str(e))
-            
-            # Try to read the log file for more details
-            log_file = os.path.join(output_dir, 'report.log')
-            if os.path.exists(log_file):
-                with open(log_file, 'r', encoding='utf-8') as f:
-                    print("\nLaTeX compilation log:")
-                    print(f.read())
-                    
-            print("\nPlease ensure you have LaTeX installed:")
-            print("Windows: https://miktex.org/download")
-            print("Linux: sudo apt-get install texlive-full")
-            print("macOS: brew install basictex")
-            raise
-
-    def _setup_document(self, doc: Document) -> None:
-        """Configure document packages and styling."""
-        # Define the document class with options
-        doc.documentclass = Command('documentclass', options=['a4paper'], arguments=['article'])
-        
-        # Add packages in correct order
-        doc.packages.append(Package('fontenc', options=['T1']))
-        doc.packages.append(Package('inputenc', options=['utf8']))
-        doc.packages.append(Package('lmodern'))
-        doc.packages.append(Package('textcomp'))
-        doc.packages.append(Package('geometry', options=['margin=1in']))
-        doc.packages.append(Package('xcolor', options=['table']))  # Add table option
-        doc.packages.append(Package('graphicx'))
-        doc.packages.append(Package('booktabs'))
-        doc.packages.append(Package('tikz'))
-        doc.packages.append(Package('pgfplots'))
-        doc.packages.append(Package('listings'))
-        
-        # Add hyperref last to avoid conflicts
-        doc.packages.append(Package('hyperref'))
-        doc.packages.append(Package('fancyhdr'))
-        
-        # Define colors before using them
-        doc.preamble.append(Command('definecolor', ['primary', 'RGB', '70,130,180']))
-        doc.preamble.append(Command('definecolor', ['warning', 'RGB', '255,140,0']))
-        doc.preamble.append(Command('definecolor', ['critical', 'RGB', '220,20,60']))
-        doc.preamble.append(Command('definecolor', ['success', 'RGB', '46,139,87']))
-        doc.preamble.append(Command('definecolor', ['light-gray', 'gray', '0.95']))
-        doc.preamble.append(Command('definecolor', ['medium-gray', 'gray', '0.85']))
-        
-        # Configure pgfplots
-        doc.preamble.append(Command('pgfplotsset', 'compat=newest'))
-        
-        # Configure listings
-        doc.preamble.append(NoEscape(
-            '\\lstset{'
-            'backgroundcolor=\\color{light-gray},'
-            'basicstyle=\\small\\ttfamily,'
-            'breaklines=true,'
-            'captionpos=b,'
-            'commentstyle=\\color{gray},'
-            'frame=single,'
-            'numbers=left,'
-            'numberstyle=\\tiny\\color{gray},'
-            'showstringspaces=false,'
-            'keywordstyle=\\color{primary}'
-            '}'
+    def _setup_custom_styles(self):
+        """Set up custom paragraph and table styles."""
+        self.styles.add(ParagraphStyle(
+            name='MainTitle',
+            parent=self.styles['Heading1'],
+            fontSize=24,
+            spaceAfter=30,
+            textColor=self.colors['text']
         ))
         
-        # Configure page style
-        doc.preamble.append(Command('pagestyle', 'fancy'))
-        doc.preamble.append(Command('fancyhf', ''))
-        doc.preamble.append(Command('rhead', 'Code Analysis Report'))
-        doc.preamble.append(Command('lhead', NoEscape('\\today')))
-        doc.preamble.append(Command('rfoot', NoEscape('Page \\thepage')))
-
-    def _add_title_page(self, doc: Document, data: Dict[str, Any]) -> None:
-        """Create the report title page."""
-        doc.append(NoEscape(r'\begin{titlepage}'))
-        with doc.create(Center()) as centered:
-            doc.append(NoEscape(r'\vspace*{2cm}'))
-            
-            # Title
-            doc.append(NoEscape(r'\Huge'))
-            doc.append(NoEscape(r'\textbf{Code Analysis Report}'))
-            
-            doc.append(NoEscape(r'\vspace{1.5cm}'))
-            
-            # Repository name
-            doc.append(NoEscape(r'\Large'))
-            doc.append(data['REPOSITORY_NAME'])
-            
-            doc.append(NoEscape(r'\vspace{1.5cm}'))
-            
-            # Add complexity chart if available
-            if 'COMPLEXITY_CHART' in data:
-                doc.append(NoEscape(
-                    r'\includegraphics[width=0.4\textwidth]{' + 
-                    data['COMPLEXITY_CHART'] + 
-                    r'}'
-                ))
-            
-            doc.append(NoEscape(r'\vspace{1.5cm}'))
-            
-            # Generation date
-            doc.append(NoEscape(r'\large'))
-            doc.append(NoEscape(r'Generated on \today'))
-            
-            doc.append(NoEscape(r'\vfill'))
-            
-            # Repository URL
-            doc.append(NoEscape(r'\textbf{Repository URL:}\\'))
-            doc.append(NoEscape(r'\url{' + data['REPOSITORY_URL'] + r'}'))
-            
-        doc.append(NoEscape(r'\end{titlepage}'))
-        doc.append(NoEscape(r'\newpage'))
-
-    def _add_executive_summary(self, doc: Document, data: Dict[str, Any]) -> None:
-        """Add executive summary section."""
-        with doc.create(Section('Executive Summary')):
-            # Key Metrics subsection
-            with doc.create(Subsection('Key Metrics')):
-                # Create table for key metrics
-                with doc.create(Center()):
-                    with doc.create(Tabular('ll')) as table:
-                        table.add_hline()
-                        table.add_row((NoEscape(r'\textbf{Metric}'), NoEscape(r'\textbf{Value}')))
-                        table.add_hline()
-                        metrics = [
-                            ('Total Lines of Code:', data['TOTAL_LOC']),
-                            ('Number of Files:', data['TOTAL_FILES']),
-                            ('Primary Languages:', data['PRIMARY_LANGUAGES']),
-                            ('Overall Maintainability Score:', f"{data['MAINTAINABILITY_SCORE']}/100")
-                        ]
-                        for label, value in metrics:
-                            table.add_row((NoEscape(label), NoEscape(value)))
-                        table.add_hline()
-            
-            # Key Findings subsection
-            with doc.create(Subsection('Key Findings')):
-                doc.append(NoEscape(r'\begin{itemize}'))
-                doc.append(NoEscape(data['KEY_FINDINGS']))
-                doc.append(NoEscape(r'\end{itemize}'))
-
-    def _add_detailed_analysis(self, doc: Document, data: Dict[str, Any]) -> None:
-        """Add detailed analysis section."""
-        with doc.create(Section('Detailed Analysis')):
-            # Code Size and Structure subsection
-            with doc.create(Subsection('Code Size and Structure')):
-                with doc.create(Center()):
-                    with doc.create(Tabular('lrr')) as table:
-                        table.add_hline()
-                        table.add_row((
-                            NoEscape(r'\textbf{Metric}'),
-                            NoEscape(r'\textbf{Count}'),
-                            NoEscape(r'\textbf{Percentage}')
-                        ))
-                        table.add_hline()
-                        for row in data['SIZE_METRICS_TABLE'].split(r'\\'):
-                            if row.strip():
-                                cols = [NoEscape(col.strip()) for col in row.split('&')]
-                                table.add_row(cols)
-                        table.add_hline()
-
-            # Complexity Analysis subsection
-            with doc.create(Subsection('Complexity Analysis')):
-                with doc.create(Figure(position='h')) as fig:
-                    fig.add_image(data['COMPLEXITY_CHART'], width=NoEscape(r'0.8\textwidth'))
-                    fig.add_caption('Distribution of Cyclomatic Complexity Across Files')
-
-            # Maintainability Distribution subsection
-            with doc.create(Subsection('Maintainability Distribution')):
-                if 'MAINTAINABILITY_CHART' in data:
-                    with doc.create(Figure(position='h')) as fig:
-                        fig.add_image(
-                            data['MAINTAINABILITY_CHART'],
-                            width=NoEscape(r'0.6\textwidth')
-                        )
-                        fig.add_caption('Distribution of Maintainability Index')
-
-            # Security Analysis subsection
-            with doc.create(Subsection('Security Analysis')):
-                doc.append(NoEscape(r'\begin{itemize}'))
-                doc.append(NoEscape(data['SECURITY_FINDINGS']))
-                doc.append(NoEscape(r'\end{itemize}'))
-
-            # Code Duplication subsection
-            with doc.create(Subsection('Code Duplication')):
-                doc.append(data['DUPLICATION_ANALYSIS'])
-
-            # Change Risk Analysis subsection
-            with doc.create(Subsection('Change Risk Analysis')):
-                with doc.create(Center()):
-                    with doc.create(Tabular('lrr')) as table:
-                        table.add_hline()
-                        table.add_row((
-                            NoEscape(r'\textbf{File}'),
-                            NoEscape(r'\textbf{Risk Score}'),
-                            NoEscape(r'\textbf{Change Frequency}')
-                        ))
-                        table.add_hline()
-                        table.append(NoEscape(data['RISK_ANALYSIS_TABLE']))
-                        table.add_hline()
-
-    def _generate_security_findings(self, stats: Dict[str, CodeMetrics]) -> str:
-        """Generate security findings section with LaTeX formatting."""
-        findings = []
+        self.styles.add(ParagraphStyle(
+            name='SectionTitle',
+            parent=self.styles['Heading2'],
+            fontSize=18,
+            spaceAfter=20,
+            textColor=self.colors['text']
+        ))
         
-        # Aggregate security issues by type
-        sql_injections = sum(m.security.potential_sql_injections for m in stats.values())
-        secrets = sum(m.security.hardcoded_secrets for m in stats.values())
-        unsafe_patterns = sum(m.security.unsafe_regex for m in stats.values())
-        all_imports = set().union(*(m.security.vulnerable_imports for m in stats.values()))
+        self.styles.add(ParagraphStyle(
+            name='SubsectionTitle',
+            parent=self.styles['Heading3'],
+            fontSize=14,
+            spaceAfter=15,
+            textColor=self.colors['text']
+        ))
         
-        # Add SQL injection findings
-        if sql_injections > 0:
-            findings.append(
-                r'\item {\color{warning} SQL Injection Risks}: ' +
-                f"Found {sql_injections} potential vulnerabilities"
-            )
-            
-        # Add hardcoded secrets findings
-        if secrets > 0:
-            findings.append(
-                r'\item {\color{critical} Hardcoded Secrets}: ' +
-                f"Detected {secrets} instances of hardcoded credentials"
-            )
-            
-        # Add unsafe pattern findings
-        if unsafe_patterns > 0:
-            findings.append(
-                r'\item {\color{warning} Unsafe Code Patterns}: ' +
-                f"Found {unsafe_patterns} instances of potentially unsafe code"
-            )
-            
-        # Add vulnerable import findings
-        if all_imports:
-            findings.append(
-                r'\item {\color{critical} Vulnerable Dependencies}: ' +
-                f"Found {len(all_imports)} potentially vulnerable imports:"
-            )
-            for imp in sorted(all_imports):
-                findings.append(f"  \\subitem {self._escape_latex(imp)}")
+        self.styles.add(ParagraphStyle(
+            name='BodyText',
+            parent=self.styles['Normal'],
+            fontSize=10,
+            leading=14,
+            textColor=self.colors['text']
+        ))
         
-        if not findings:
-            findings.append(r'\item No significant security issues detected')
-            
-        return '\n'.join(findings)
+        self.styles.add(ParagraphStyle(
+            name='MetricValue',
+            parent=self.styles['Normal'],
+            fontSize=12,
+            leading=16,
+            textColor=self.colors['primary']
+        ))
+        
+        # Table styles
+        self.table_style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), self.colors['primary']),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), self.colors['background']),
+            ('TEXTCOLOR', (0, 1), (-1, -1), self.colors['text']),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ])
+        
+        # Style for alternating table rows
+        self.alternating_table_style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), self.colors['primary']),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), self.colors['background']),
+            ('TEXTCOLOR', (0, 1), (-1, -1), self.colors['text']),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, self.colors['background']])
+        ])
     
-    def _calculate_maintainability_score(self, stats: Dict[str, CodeMetrics]) -> float:
-        """Calculate overall maintainability score."""
-        if not stats:
-            return 0.0
-        return sum(m.complexity.maintainability_index 
-                  for m in stats.values()) / len(stats)
-
-    def _generate_duplication_analysis(self, stats: Dict[str, CodeMetrics]) -> str:
-        """Generate duplication analysis section."""
-        total_lines = sum(m.lines_code for m in stats.values())
-        duplicate_blocks = sum(
-            1 for m in stats.values() 
-            for pattern in m.code_patterns.values() 
-            if pattern > 5
+    def _add_title(self, title: str, style='MainTitle'):
+        """Add a title to the document."""
+        self.story.append(Paragraph(title, self.styles[style]))
+        self.story.append(Spacer(1, 20))
+        
+    def _add_paragraph(self, text: str, style='BodyText'):
+        """Add a paragraph to the document."""
+        self.story.append(Paragraph(text, self.styles[style]))
+        self.story.append(Spacer(1, 10))
+        
+    def _add_table(self, data, colWidths=None, style=None):
+        """Add a table to the document."""
+        if style is None:
+            style = self.table_style
+        table = Table(data, colWidths=colWidths)
+        table.setStyle(style)
+        self.story.append(table)
+        self.story.append(Spacer(1, 20))
+        
+    def _add_page_break(self):
+        """Add a page break to the document."""
+        self.story.append(PageBreak())
+        
+    def generate_pdf(self, code_metrics, deployment_analysis=None):
+        """Generate the complete PDF report."""
+        # Cover page
+        self._generate_cover_page(code_metrics)
+        self._add_page_break()
+        
+        # Table of contents placeholder (will be filled by reportlab)
+        self.toc = []
+        self._add_title("Table of Contents")
+        self._add_paragraph("[[TOC]]")  # ReportLab will replace this
+        self._add_page_break()
+        
+        # Generate each section
+        self._generate_summary_section(code_metrics)
+        self._add_page_break()
+        
+        self._generate_security_section(code_metrics)
+        self._add_page_break()
+        
+        self._generate_architecture_section(code_metrics)
+        self._add_page_break()
+        
+        self._generate_complexity_section(code_metrics)
+        self._add_page_break()
+        
+        self._generate_testing_section(code_metrics)
+        self._add_page_break()
+        
+        self._generate_trends_section(code_metrics)
+        self._add_page_break()
+        
+        if deployment_analysis:
+            self._generate_deployment_section(deployment_analysis)
+            self._add_page_break()
+        
+        self._generate_appendix(code_metrics)
+        
+        # Build the PDF with table of contents
+        self.doc.build(
+            self.story,
+            onFirstPage=self._header_footer,
+            onLaterPages=self._header_footer
         )
         
-        if duplicate_blocks == 0:
-            return "No significant code duplication detected."
+    def _generate_cover_page(self, code_metrics):
+        """Generate the report cover page."""
+        # Logo or header image could be added here
+        self._add_title("Code Analysis Report", "MainTitle")
+        self._add_paragraph(f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
-        return (
-            f"Found {duplicate_blocks} blocks of duplicated code. "
-            f"Consider refactoring these sections to improve maintainability."
+        # Quick stats
+        total_files = len(code_metrics)
+        total_lines = sum(m.lines_code + m.lines_comment + m.lines_blank for m in code_metrics.values())
+        
+        stats = [
+            f"Files Analyzed: {total_files}",
+            f"Total Lines: {total_lines:,}",
+            f"Generated by: CodeMetricsPDFGenerator v1.0"
+        ]
+        
+        for stat in stats:
+            self._add_paragraph(stat)
+            
+    def _header_footer(self, canvas, doc):
+        """Add header and footer to each page."""
+        canvas.saveState()
+        
+        # Header
+        canvas.setFont('Helvetica-Bold', 10)
+        canvas.drawString(72, doc.pagesize[1] - 36, "Code Analysis Report")
+        
+        # Footer
+        canvas.setFont('Helvetica', 8)
+        page_num = canvas.getPageNumber()
+        text = f"Page {page_num}"
+        canvas.drawString(doc.pagesize[0] - 108, 36, text)
+        
+        canvas.restoreState()
+        
+    def _generate_appendix(self, code_metrics):
+        """Generate appendix with additional details."""
+        self._add_title("Appendix", "SectionTitle")
+        
+        # Methodology
+        self._add_title("Analysis Methodology", "SubsectionTitle")
+        methodology = """
+        This report was generated using static code analysis techniques, examining various aspects
+        of the codebase including complexity, security, architecture, and testing metrics. The
+        analysis includes both automated tools and pattern recognition to identify potential
+        issues and areas for improvement.
+        """
+        self._add_paragraph(methodology)
+        
+        # Metric Definitions
+        self._add_title("Metric Definitions", "SubsectionTitle")
+        metrics = [
+            ("Cyclomatic Complexity", 
+             "Measures the number of linearly independent paths through code"),
+            ("Cognitive Complexity",
+             "Measures how difficult the code is to understand"),
+            ("Maintainability Index",
+             "Indicates how maintainable the code is (0-100 scale)"),
+            ("Component Coupling",
+             "Measures how interconnected different components are"),
+            ("Change Risk",
+             "Probability of issues when modifying the code")
+        ]
+        
+        for title, description in metrics:
+            self._add_paragraph(f"• {title}: {description}")
+            
+        # Version Information
+        self._add_title("Analysis Information", "SubsectionTitle")
+        info = [
+            f"Report Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            "Generator Version: 1.0",
+            "Analysis Tools:",
+            "  - Static Code Analysis",
+            "  - Security Pattern Detection",
+            "  - Architecture Analysis",
+            "  - Testing Coverage Analysis"
+        ]
+        
+        for line in info:
+            self._add_paragraph(line)
+
+    def _generate_summary_section(self, code_metrics):
+        """Generate the summary section of the report."""
+        self._add_title("1. Executive Summary", "SectionTitle")
+        
+        # Overall metrics summary
+        total_files = len(code_metrics)
+        total_lines = sum(m.lines_code + m.lines_comment + m.lines_blank for m in code_metrics.values())
+        total_code_lines = sum(m.lines_code for m in code_metrics.values())
+        
+        summary_text = f"""
+        This report analyzes {total_files} source code files containing a total of {total_lines:,} lines,
+        of which {total_code_lines:,} are lines of code. The analysis covers code quality, security,
+        architecture, and complexity metrics.
+        """
+        self._add_paragraph(summary_text)
+        
+        # Key metrics table
+        self._add_title("Key Metrics", "SubsectionTitle")
+        
+        # Calculate aggregate metrics
+        avg_complexity = sum(m.complexity.cyclomatic_complexity for m in code_metrics.values()) / total_files
+        security_issues = sum(
+            m.security.potential_sql_injections + 
+            m.security.hardcoded_secrets + 
+            len(m.security.vulnerable_imports)
+            for m in code_metrics.values()
         )
-    
-    def _add_deployment_impact_analysis(self, doc: Document, data: Dict[str, Any]) -> None:
-        """Add deployment impact analysis section."""
-        with doc.create(Section('Deployment Impact Analysis')):
-            # Deployment Confidence subsection
-            with doc.create(Subsection('Deployment Confidence')):
-                with doc.create(Center()):
-                    doc.append(NoEscape(r'\Large\textbf{' + data['DEPLOYMENT_CONFIDENCE'] + r'}'))
-                doc.append(NoEscape(r'\vspace{0.5cm}'))
+        arch_issues = sum(
+            len(m.architecture.circular_dependencies) + 
+            m.architecture.layering_violations
+            for m in code_metrics.values()
+        )
+        
+        key_metrics_data = [
+            ['Metric', 'Value', 'Status'],
+            ['Files Analyzed', str(total_files), 'INFO'],
+            ['Total Lines', f"{total_lines:,}", 'INFO'],
+            ['Average Complexity', f"{avg_complexity:.2f}", 'WARNING' if avg_complexity > 10 else 'SUCCESS'],
+            ['Security Issues', str(security_issues), 'DANGER' if security_issues > 0 else 'SUCCESS'],
+            ['Architecture Issues', str(arch_issues), 'WARNING' if arch_issues > 0 else 'SUCCESS']
+        ]
+        
+        # Apply color coding based on status
+        status_colors = {
+            'DANGER': self.colors['danger'],
+            'WARNING': self.colors['warning'],
+            'SUCCESS': self.colors['success'],
+            'INFO': self.colors['info']
+        }
+        
+        table_style = self.table_style
+        for i, row in enumerate(key_metrics_data[1:], 1):
+            status = row[2]
+            color = status_colors.get(status, self.colors['info'])
+            table_style.add('TEXTCOLOR', (1, i), (1, i), color)
+        
+        self._add_table(key_metrics_data, colWidths=[2*inch, 1.5*inch, 1.5*inch], style=table_style)
+        
+        # File distribution pie chart
+        self._add_title("File Distribution", "SubsectionTitle")
+        
+        # Group files by extension
+        extension_counts = {}
+        for file_path in code_metrics:
+            ext = file_path.split('.')[-1]
+            extension_counts[ext] = extension_counts.get(ext, 0) + 1
+        
+        # Create pie chart
+        drawing = Drawing(400, 200)
+        pie = Pie()
+        pie.x = 150
+        pie.y = 25
+        pie.width = 150
+        pie.height = 150
+        
+        pie_data = list(extension_counts.values())
+        pie_labels = list(extension_counts.keys())
+        
+        pie.data = pie_data
+        pie.labels = pie_labels
+        pie.slices.strokeWidth = 0.5
+        
+        # Use different colors for each slice
+        for i, (ext, count) in enumerate(extension_counts.items()):
+            pie.slices[i].fillColor = colors.HexColor(f"#{hash(ext) % 0xFFFFFF:06x}")
+        
+        drawing.add(pie)
+        self.story.append(drawing)
+        self.story.append(Spacer(1, 20))
+        
+        # Add legend
+        legend_data = [['Extension', 'Files', 'Percentage']]
+        total = sum(pie_data)
+        for ext, count in extension_counts.items():
+            percentage = (count / total) * 100
+            legend_data.append([ext, str(count), f"{percentage:.1f}%"])
+        
+        self._add_table(legend_data, colWidths=[1.5*inch, inch, inch])
+        
+        # Code quality metrics
+        self._add_title("Code Quality Overview", "SubsectionTitle")
+        
+        quality_data = [
+            ['Metric', 'Value', 'Threshold'],
+            ['Comment Ratio', f"{sum(m.lines_comment for m in code_metrics.values()) / total_lines * 100:.1f}%", "20%"],
+            ['Average Function Length', f"{sum(m.avg_function_length for m in code_metrics.values()) / total_files:.1f}", "15"],
+            ['TODOs', str(sum(m.todo_count for m in code_metrics.values())), "N/A"]
+        ]
+        
+        self._add_table(quality_data, colWidths=[2*inch, 1.5*inch, 1.5*inch])
+        
+        # Add summary insights
+        self._add_title("Key Insights", "SubsectionTitle")
+        
+        # Calculate insights
+        high_complexity_files = [
+            f for f, m in code_metrics.items() 
+            if m.complexity.cyclomatic_complexity > 15
+        ]
+        
+        security_files = [
+            f for f, m in code_metrics.items()
+            if (m.security.potential_sql_injections + 
+                m.security.hardcoded_secrets + 
+                len(m.security.vulnerable_imports)) > 0
+        ]
+        
+        insights = [
+            f"• {len(high_complexity_files)} files exceed recommended complexity thresholds",
+            f"• {len(security_files)} files contain potential security issues",
+            f"• Average maintainability index: {sum(m.complexity.maintainability_index for m in code_metrics.values()) / total_files:.1f}/100"
+        ]
+        
+        for insight in insights:
+            self._add_paragraph(insight)
+            
+        # Add recommendations if there are issues
+        if high_complexity_files or security_files:
+            self._add_title("Recommendations", "SubsectionTitle")
+            recommendations = [
+                "• Consider refactoring complex files to improve maintainability",
+                "• Address security issues in identified files as a priority",
+                "• Increase test coverage for high-risk components",
+                "• Review and resolve TODO items in the codebase",
+                "• Consider adding more documentation for complex components"
+            ]
+            
+            for recommendation in recommendations:
+                self._add_paragraph(recommendation)
+                
+        # Add a trend chart if historical data is available
+        if hasattr(code_metrics, 'history'):
+            self._add_title("Historical Trends", "SubsectionTitle")
+            
+            # Create line chart for historical metrics
+            drawing = Drawing(400, 200)
+            chart = HorizontalLineChart()
+            chart.x = 50
+            chart.y = 50
+            chart.height = 125
+            chart.width = 300
+            
+            # Extract historical data
+            dates = [h['date'] for h in code_metrics.history]
+            complexities = [h['avg_complexity'] for h in code_metrics.history]
+            issues = [h['total_issues'] for h in code_metrics.history]
+            
+            chart.data = [complexities, issues]
+            chart.lines[0].strokeColor = self.colors['primary']
+            chart.lines[1].strokeColor = self.colors['danger']
+            
+            chart.categoryAxis.categoryNames = dates
+            chart.categoryAxis.labels.boxAnchor = 'ne'
+            chart.categoryAxis.labels.dx = -8
+            chart.categoryAxis.labels.dy = -2
+            chart.categoryAxis.labels.angle = 30
+            
+            drawing.add(chart)
+            self.story.append(drawing)
+            self.story.append(Spacer(1, 20))
 
-            # Factor Analysis subsection
-            with doc.create(Subsection('Factor Analysis')):
-                with doc.create(Center()):
-                    with doc.create(Tabular('lrr')) as table:
-                        table.add_hline()
-                        table.add_row((
-                            NoEscape(r'\textbf{Feature}'),
-                            NoEscape(r'\textbf{Cross-Model Impact}'),
-                            NoEscape(r'\textbf{Deviation}')
-                        ))
-                        table.add_hline()
-                        table.append(NoEscape(data['FEATURE_IMPORTANCE_TABLE']))
-                        table.add_hline()
-
-            # Model Explanations subsection
-            with doc.create(Subsection('Model Explanations')):
-                # Window Selection
-                doc.append(NoEscape(r'\subsubsection{Deployment Window Selection}'))
-                doc.append(NoEscape(data['WINDOW_EXPLANATION']))
-
-                # Rollback Risk
-                doc.append(NoEscape(r'\subsubsection{Rollback Risk Factors}'))
-                doc.append(NoEscape(data['ROLLBACK_EXPLANATION']))
-
-                # Resource Requirements
-                doc.append(NoEscape(r'\subsubsection{Resource Requirements Rationale}'))
-                doc.append(NoEscape(data['RESOURCE_EXPLANATION']))
-
-                # Incident Risk
-                doc.append(NoEscape(r'\subsubsection{Incident Risk Analysis}'))
-                doc.append(NoEscape(data['INCIDENT_EXPLANATION']))
-
-            # Feature Interactions subsection
-            with doc.create(Subsection('Feature Interactions')):
-                doc.append(NoEscape(r'\begin{itemize}'))
-                doc.append(NoEscape(data['FEATURE_INTERACTIONS']))
-                doc.append(NoEscape(r'\end{itemize}'))
-
-            # Deployment Windows subsection
-            with doc.create(Subsection('Optimal Deployment Windows')):
-                with doc.create(Center()):
-                    with doc.create(Tabular('lrrr')) as table:
-                        table.add_hline()
-                        table.add_row((
-                            NoEscape(r'\textbf{Time Window}'),
-                            NoEscape(r'\textbf{Success Rate}'),
-                            NoEscape(r'\textbf{Team Availability}'),
-                            NoEscape(r'\textbf{Risk Score}')
-                        ))
-                        table.add_hline()
-                        table.append(NoEscape(data['DEPLOYMENT_WINDOWS_TABLE']))
-                        table.add_hline()
-
-            # Resource Requirements subsection
-            with doc.create(Subsection('Resource Requirements')):
-                doc.append(NoEscape(r'\begin{itemize}'))
-                doc.append(NoEscape(data['RESOURCE_REQUIREMENTS']))
-                doc.append(NoEscape(r'\end{itemize}'))
-
-            # Incident Analysis subsection
-            with doc.create(Subsection('Incident Analysis')):
-                with doc.create(Center()):
-                    with doc.create(Tabular('lr')) as table:
-                        table.add_row((
-                            NoEscape(r'\textbf{Incident Probability:}'),
-                            NoEscape(r'{\large\color{warning}' + data['INCIDENT_PROBABILITY'] + r'}')
-                        ))
-                        table.add_row((
-                            NoEscape(r'\textbf{Severity Level:}'),
-                            NoEscape(r'{\large\color{warning}' + data['INCIDENT_SEVERITY'] + r'}')
-                        ))
-                        table.add_row((
-                            NoEscape(r'\textbf{Est. Resolution Time:}'),
-                            NoEscape(r'{\large ' + data['INCIDENT_RESOLUTION_TIME'] + r' hours}')
-                        ))
-
-                doc.append(NoEscape(r'\textbf{Potential Areas of Concern:}'))
-                doc.append(NoEscape(r'\begin{itemize}'))
-                doc.append(NoEscape(data['INCIDENT_AREAS']))
-                doc.append(NoEscape(r'\end{itemize}'))
-
-    def _add_recommendations_section(self, doc: Document, data: Dict[str, Any]) -> None:
-        """Add recommendations section."""
-        with doc.create(Section('Recommendations')):
-            doc.append(NoEscape(data['RECOMMENDATIONS']))
-
-    def _generate_recommendations(self, stats: Dict[str, CodeMetrics]) -> str:
-        """Generate recommendations based on analysis."""
+    def _generate_security_section(self, code_metrics):
+        """Generate the security analysis section of the report."""
+        self._add_title("2. Security Analysis", "SectionTitle")
+        
+        # Overview paragraph
+        total_security_issues = sum(
+            m.security.potential_sql_injections + 
+            m.security.hardcoded_secrets + 
+            m.security.unsafe_regex +
+            len(m.security.vulnerable_imports)
+            for m in code_metrics.values()
+        )
+        
+        overview = f"""
+        Security analysis identified {total_security_issues} potential security issues across the codebase.
+        This section details the types of vulnerabilities found and their locations.
+        """
+        self._add_paragraph(overview)
+        
+        # Security issues breakdown
+        self._add_title("Security Issues Breakdown", "SubsectionTitle")
+        
+        # Aggregate security metrics
+        total_sql_injections = sum(m.security.potential_sql_injections for m in code_metrics.values())
+        total_hardcoded = sum(m.security.hardcoded_secrets for m in code_metrics.values())
+        total_unsafe_regex = sum(m.security.unsafe_regex for m in code_metrics.values())
+        total_vuln_imports = sum(len(m.security.vulnerable_imports) for m in code_metrics.values())
+        
+        security_data = [
+            ['Vulnerability Type', 'Count', 'Severity'],
+            ['SQL Injection Risks', str(total_sql_injections), 'HIGH'],
+            ['Hardcoded Secrets', str(total_hardcoded), 'HIGH'],
+            ['Unsafe Regex Usage', str(total_unsafe_regex), 'MEDIUM'],
+            ['Vulnerable Imports', str(total_vuln_imports), 'MEDIUM']
+        ]
+        
+        # Add severity colors
+        severity_colors = {
+            'HIGH': self.colors['danger'],
+            'MEDIUM': self.colors['warning'],
+            'LOW': self.colors['info']
+        }
+        
+        table_style = self.table_style
+        for i, row in enumerate(security_data[1:], 1):
+            severity = row[2]
+            color = severity_colors.get(severity, self.colors['info'])
+            table_style.add('TEXTCOLOR', (2, i), (2, i), color)
+        
+        self._add_table(security_data, colWidths=[2.5*inch, inch, 1.5*inch], style=table_style)
+        
+        # Security issues distribution chart
+        drawing = Drawing(400, 200)
+        chart = VerticalBarChart()
+        chart.x = 50
+        chart.y = 50
+        chart.height = 125
+        chart.width = 300
+        
+        chart.data = [[
+            total_sql_injections,
+            total_hardcoded,
+            total_unsafe_regex,
+            total_vuln_imports
+        ]]
+        
+        chart.categoryAxis.categoryNames = ['SQL Injection', 'Secrets', 'Regex', 'Imports']
+        chart.bars[0].fillColor = self.colors['danger']
+        
+        drawing.add(chart)
+        self.story.append(drawing)
+        self.story.append(Spacer(1, 20))
+        
+        # Files with security issues
+        self._add_title("Files with Security Issues", "SubsectionTitle")
+        
+        vulnerable_files = [
+            (file_path, metrics.security)
+            for file_path, metrics in code_metrics.items()
+            if (metrics.security.potential_sql_injections + 
+                metrics.security.hardcoded_secrets + 
+                metrics.security.unsafe_regex +
+                len(metrics.security.vulnerable_imports)) > 0
+        ]
+        
+        if vulnerable_files:
+            vuln_data = [['File', 'Issues Found', 'Risk Level']]
+            
+            for file_path, security in vulnerable_files:
+                total_issues = (
+                    security.potential_sql_injections +
+                    security.hardcoded_secrets +
+                    security.unsafe_regex +
+                    len(security.vulnerable_imports)
+                )
+                
+                risk_level = 'HIGH' if total_issues > 2 else 'MEDIUM' if total_issues > 1 else 'LOW'
+                
+                vuln_data.append([
+                    file_path.split('/')[-1],  # Just the filename
+                    str(total_issues),
+                    risk_level
+                ])
+            
+            # Apply color coding for risk levels
+            table_style = self.alternating_table_style
+            for i, row in enumerate(vuln_data[1:], 1):
+                risk = row[2]
+                color = severity_colors.get(risk, self.colors['info'])
+                table_style.add('TEXTCOLOR', (2, i), (2, i), color)
+            
+            self._add_table(vuln_data, colWidths=[3*inch, inch, inch], style=table_style)
+        else:
+            self._add_paragraph("No files with security issues were found.")
+        
+        # Insecure patterns analysis
+        self._add_title("Insecure Pattern Analysis", "SubsectionTitle")
+        
+        # Aggregate insecure patterns
+        pattern_counts = {}
+        for metrics in code_metrics.values():
+            for pattern, count in metrics.security.insecure_patterns.items():
+                pattern_counts[pattern] = pattern_counts.get(pattern, 0) + count
+        
+        if pattern_counts:
+            pattern_data = [['Pattern Type', 'Occurrences', 'Risk Level']]
+            
+            for pattern, count in pattern_counts.items():
+                risk_level = 'HIGH' if count > 5 else 'MEDIUM' if count > 2 else 'LOW'
+                pattern_data.append([
+                    pattern.replace('_', ' ').title(),
+                    str(count),
+                    risk_level
+                ])
+            
+            # Apply color coding for risk levels
+            table_style = self.alternating_table_style
+            for i, row in enumerate(pattern_data[1:], 1):
+                risk = row[2]
+                color = severity_colors.get(risk, self.colors['info'])
+                table_style.add('TEXTCOLOR', (2, i), (2, i), color)
+            
+            self._add_table(pattern_data, colWidths=[2.5*inch, inch, 1.5*inch], style=table_style)
+        else:
+            self._add_paragraph("No insecure patterns were detected.")
+        
+        # Recommendations
+        self._add_title("Security Recommendations", "SubsectionTitle")
+        
         recommendations = []
         
-        # Security recommendations
-        security_issues = sum(
-            m.security.potential_sql_injections + 
-            m.security.hardcoded_secrets +
-            len(m.security.vulnerable_imports)
-            for m in stats.values()
-        )
-        if security_issues > 0:
-            recommendations.extend([
-                r'\subsection{Security Recommendations}',
-                r'\begin{itemize}',
-                r'\item Review and fix SQL injection vulnerabilities',
-                r'\item Remove hardcoded secrets and use environment variables',
-                r'\item Update or replace vulnerable package imports',
-                r'\end{itemize}'
-            ])
-
-        # Code quality recommendations
-        quality_issues = []
-        if any(m.complexity.cyclomatic_complexity > 15 for m in stats.values()):
-            quality_issues.append(r'\item Refactor complex functions (cyclomatic complexity > 15)')
-        if any(m.complexity.maintainability_index < 40 for m in stats.values()):
-            quality_issues.append(r'\item Improve maintainability of poorly maintained files')
-        if any(len(m.code_patterns) > 2 for m in stats.values()):
-            quality_issues.append(r'\item Address code duplication in identified files')
-        
-        if quality_issues:
-            recommendations.extend([
-                r'\subsection{Code Quality Recommendations}',
-                r'\begin{itemize}',
-                *quality_issues,
-                r'\end{itemize}'
-            ])
-
-        if not recommendations:
-            return "No critical issues requiring immediate attention were found."
-        
-        return '\n'.join(recommendations)
-    
-    def generate_charts(self, stats: Dict[str, CodeMetrics], output_dir: str) -> Dict[str, str]:
-        """Generate charts and visualizations for the report."""
-        charts_dir = os.path.join(output_dir, 'charts')
-        os.makedirs(charts_dir, exist_ok=True)
-        
-        # Use default style instead of seaborn
-        plt.style.use('default')
-        
-        # Complexity distribution chart
-        plt.figure(figsize=(10, 6))
-        complexities = [m.complexity.cyclomatic_complexity for m in stats.values()]
-        plt.hist(complexities, bins=20, edgecolor='black')
-        plt.title('Complexity Distribution')
-        plt.xlabel('Cyclomatic Complexity')
-        plt.ylabel('Number of Files')
-        complexity_chart = 'charts/complexity_dist.png'
-        plt.savefig(os.path.join(output_dir, complexity_chart), bbox_inches='tight', dpi=300)
-        plt.close()
-        
-        # Maintainability chart
-        plt.figure(figsize=(8, 8))
-        maintainability_scores = [m.complexity.maintainability_index for m in stats.values()]
-        categories = ['Poor (<40)', 'Fair (40-65)', 'Good (65-85)', 'Excellent (>85)']
-        counts = [
-            sum(1 for m in maintainability_scores if m < 40),
-            sum(1 for m in maintainability_scores if 40 <= m < 65),
-            sum(1 for m in maintainability_scores if 65 <= m < 85),
-            sum(1 for m in maintainability_scores if m >= 85)
-        ]
-        colors = ['#DC143C', '#FF8C00', '#4682B4', '#2E8B57']
-        plt.pie(counts, labels=categories, autopct='%1.1f%%', colors=colors)
-        plt.title('Maintainability Distribution')
-        maintainability_chart = 'charts/maintainability_pie.png'
-        plt.savefig(os.path.join(output_dir, maintainability_chart), bbox_inches='tight', dpi=300)
-        plt.close()
-        
-        # File distribution chart
-        plt.figure(figsize=(10, 6))
-        extensions = self._count_file_extensions(stats)
-        plt.bar(list(extensions.keys()), list(extensions.values()), color='#4682B4', edgecolor='black')
-        plt.title('Files by Extension')
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        distribution_chart = 'charts/file_distribution.png'
-        plt.savefig(os.path.join(output_dir, distribution_chart), bbox_inches='tight', dpi=300)
-        plt.close()
-        
-        return {
-            'COMPLEXITY_CHART': complexity_chart,
-            'MAINTAINABILITY_CHART': maintainability_chart,
-            'DISTRIBUTION_CHART': distribution_chart
-        }
-    
-    def _generate_size_table(self, stats: Dict[str, CodeMetrics]) -> str:
-        """Generate the size metrics table content."""
-        total_code = sum(m.lines_code for m in stats.values())
-        total_comments = sum(m.lines_comment for m in stats.values())
-        total_blank = sum(m.lines_blank for m in stats.values())
-        total_lines = total_code + total_comments + total_blank
-        
-        if total_lines == 0:
-            return r"No Code & 0 & 0\%"
-        
-        rows = []
-        for label, count in [
-            ('Code Lines', total_code),
-            ('Comment Lines', total_comments),
-            ('Blank Lines', total_blank)
-        ]:
-            rows.append(
-                f"{label} & {count:,} & {(count/total_lines*100):.1f}\\%"
+        if total_sql_injections > 0:
+            recommendations.append(
+                "• Use parameterized queries or ORM to prevent SQL injection vulnerabilities"
+            )
+        if total_hardcoded > 0:
+            recommendations.append(
+                "• Move secrets to environment variables or secure secret management systems"
+            )
+        if total_unsafe_regex > 0:
+            recommendations.append(
+                "• Review and secure regex patterns, especially in user input processing"
+            )
+        if total_vuln_imports > 0:
+            recommendations.append(
+                "• Replace vulnerable imports with secure alternatives"
             )
         
-        return ' \\\\\n'.join(rows)
-    
-    def _add_detailed_metrics_section(self, doc: Document, data: Dict[str, Any]) -> None:
-        """Add detailed metrics section."""
-        with doc.create(Section('Detailed Metrics')):
-            doc.append(NoEscape(data['DETAILED_METRICS']))
-
-    def _generate_detailed_metrics(self, stats: Dict[str, CodeMetrics]) -> str:
-        """Generate detailed metrics section."""
-        sections = []
-        
-        # Complexity metrics
-        avg_complexity = (
-            sum(m.complexity.cyclomatic_complexity for m in stats.values()) / 
-            len(stats) if stats else 0
-        )
-        sections.extend([
-            "\\subsection{Complexity Metrics}",
-            f"Average Cyclomatic Complexity: {avg_complexity:.2f}",
-            "\\vspace{0.5cm}"
-        ])
-        
-        # Most complex files
-        complex_files = sorted(
-            stats.items(),
-            key=lambda x: x[1].complexity.cyclomatic_complexity,
-            reverse=True
-        )[:5]
-        
-        if complex_files:
-            sections.extend([
-                "Most Complex Files:",
-                "\\begin{itemize}"
-            ])
-            for file, metrics in complex_files:
-                sections.append(
-                    f"\\item {self._escape_latex(Path(file).name)}: "
-                    f"Complexity = {metrics.complexity.cyclomatic_complexity}"
-                )
-            sections.append("\\end{itemize}")
-
-        # Code quality metrics
-        sections.extend([
-            "\\subsection{Code Quality Metrics}",
-            "\\begin{itemize}"
-        ])
-
-        # Average maintainability
-        avg_maintainability = sum(m.complexity.maintainability_index for m in stats.values()) / len(stats) if stats else 0
-        sections.append(f"\\item Average Maintainability Index: {avg_maintainability:.2f}/100")
-
-        # Documentation coverage
-        total_code = sum(m.lines_code for m in stats.values())
-        total_comments = sum(m.lines_comment for m in stats.values())
-        doc_ratio = (total_comments / total_code * 100) if total_code > 0 else 0
-        sections.append(f"\\item Documentation Coverage: {doc_ratio:.1f}\\%")
-
-        sections.append("\\end{itemize}")
-
-        return '\n'.join(sections)
-    
-    def _add_appendix(self, doc: Document) -> None:
-        """Add appendix section."""
-        with doc.create(Section('Appendix')):
-            with doc.create(Subsection('Analysis Methodology')):
-                doc.append('This report was generated using automated code analysis tools that examine:')
-                metrics = [
-                    'Static code analysis',
-                    'Complexity metrics',
-                    'Security patterns',
-                    'Git history',
-                    'Dependency graphs',
-                    'Code duplication',
-                    'Architecture patterns',
-                    'Historical deployment data',
-                    'Team availability patterns',
-                    'Incident history'
-                ]
-                doc.append(NoEscape(r'\begin{itemize}'))
-                for metric in metrics:
-                    doc.append(NoEscape(f'\\item {metric}'))
-                doc.append(NoEscape(r'\end{itemize}'))
-
-            if self.ml_system:
-                with doc.create(Subsection('ML Model Information')):
-                    doc.append('The machine learning predictions in this report are based on:')
-                    factors = [
-                        'Historical deployment patterns',
-                        'Team performance metrics',
-                        'Code change patterns',
-                        'Incident history',
-                        'System architecture evolution'
-                    ]
-                    doc.append(NoEscape(r'\begin{itemize}'))
-                    for factor in factors:
-                        doc.append(NoEscape(f'\\item {factor}'))
-                    doc.append(NoEscape(r'\end{itemize}'))
-
-    def _generate_risk_table(self, stats: Dict[str, CodeMetrics]) -> str:
-        """Generate risk analysis table content."""
-        risk_files = [
-            (file, m.complexity.change_risk, 
-             m.change_probability.change_frequency if m.change_probability else 0)
-            for file, m in stats.items()
-            if m.complexity.change_risk > 0
-        ]
-        
-        if not risk_files:
-            return "No files & 0 & 0"
-        
-        rows = []
-        for file, risk, freq in sorted(risk_files, key=lambda x: x[1], reverse=True)[:5]:
-            short_path = Path(file).name
-            rows.append(
-                f"{self._escape_latex(short_path)} & {risk:.1f} & {freq}"
-            )
-        
-        return ' \\\\\n        '.join(rows)
-    
-    def _format_risk_score(self, score: float) -> str:
-        """Format risk score with appropriate coloring based on severity."""
-        if score >= 75:
-            return f"{{\\color{{critical}}{score:.1f}}}"
-        elif score >= 50:
-            return f"{{\\color{{warning}}{score:.1f}}}"
+        if recommendations:
+            for rec in recommendations:
+                self._add_paragraph(rec)
         else:
-            return f"{{\\color{{success}}{score:.1f}}}"
-    
-    def _get_primary_languages(self, stats: Dict[str, CodeMetrics]) -> str:
-        """Get primary languages based on file extensions."""
-        from collections import Counter
-        extensions = Counter(Path(file).suffix.lstrip('.').upper() 
-                           for file in stats.keys())
-        top_langs = [f"{lang} ({count})" 
-                    for lang, count in extensions.most_common(3)]
-        return ', '.join(top_langs)
+            self._add_paragraph("No specific security recommendations at this time.")
 
-    def _count_file_extensions(self, stats: Dict[str, CodeMetrics]) -> Dict[str, int]:
-        """Count files by extension."""
-        extensions = {}
-        for file_path in stats.keys():
-            ext = Path(file_path).suffix
-            if ext:
-                extensions[ext] = extensions.get(ext, 0) + 1
-        return extensions
-    
-    def _generate_key_findings(self, stats: Dict[str, CodeMetrics]) -> str:
-        """Generate key findings section."""
-        findings = []
+    def _generate_architecture_section(self, code_metrics):
+        """Generate the architecture analysis section of the report."""
+        self._add_title("3. Architecture Analysis", "SectionTitle")
         
-        # Security issues
-        security_issues = sum(
-            m.security.potential_sql_injections + 
-            m.security.hardcoded_secrets +
-            len(m.security.vulnerable_imports)
-            for m in stats.values()
-        )
-        if security_issues > 0:
-            findings.append(f"\\item Found {security_issues} potential security issues")
+        # Overview
+        total_files = len(code_metrics)
+        total_interfaces = sum(m.architecture.interface_count for m in code_metrics.values())
+        total_abstract_classes = sum(m.architecture.abstract_class_count for m in code_metrics.values())
+        total_circular_deps = sum(len(m.architecture.circular_dependencies) for m in code_metrics.values())
         
-        # Complexity
-        high_complexity = sum(
-            1 for m in stats.values() 
-            if m.complexity.cyclomatic_complexity > 15
-        )
-        if high_complexity > 0:
-            findings.append(
-                f"\\item {high_complexity} files have high cyclomatic complexity (>15)"
-            )
+        overview = f"""
+        Architectural analysis examined {total_files} files, identifying {total_interfaces} interfaces
+        and {total_abstract_classes} abstract classes. The analysis revealed {total_circular_deps}
+        potential circular dependencies.
+        """
+        self._add_paragraph(overview)
         
-        # Maintainability
-        poor_maintainability = sum(
-            1 for m in stats.values()
-            if m.complexity.maintainability_index < 40
-        )
-        if poor_maintainability > 0:
-            findings.append(
-                f"\\item {poor_maintainability} files have poor maintainability (MI < 40)"
-            )
+        # Architecture Metrics Overview
+        self._add_title("Architecture Metrics Overview", "SubsectionTitle")
         
-        if not findings:
-            findings.append("\\item No critical issues found")
+        # Calculate average coupling and abstraction
+        avg_coupling = sum(m.architecture.component_coupling for m in code_metrics.values()) / total_files
+        avg_abstraction = sum(m.architecture.abstraction_level for m in code_metrics.values()) / total_files
+        total_layering = sum(m.architecture.layering_violations for m in code_metrics.values())
         
-        return '\n'.join(findings)
-    
-    def _escape_latex(self, text: str) -> str:
-        """Escape special LaTeX characters in text."""
-        if not isinstance(text, str):
-            return str(text)
-            
-        # Don't escape if it looks like a LaTeX command
-        if (text.startswith('\\') or '\\item' in text or 
-            '\\begin' in text or '\\end' in text or 
-            '\\section' in text or '\\subsection' in text):
-            return text
-            
-        # Handle math mode subscripts specially
-        if '_' in text and '{' in text and '}' in text:
-            # Check if it matches the pattern for math mode subscripts (e.g., a_{b})
-            import re
-            if re.match(r'^.*_\{[^}]+\}.*$', text):
-                return text
-
-        # Process using character map
-        chars = {
-            '&': r'\&',
-            '%': r'\%',
-            '$': r'\$',
-            '#': r'\#',
-            '_': r'\_',
-            '{': r'\{',
-            '}': r'\}',
-            '~': r'\textasciitilde{}',
-            '^': r'\textasciicircum{}',
-            '\\': r'\textbackslash{}'
+        metrics_data = [
+            ['Metric', 'Value', 'Status'],
+            ['Component Coupling', f"{avg_coupling:.2f}", 'HIGH' if avg_coupling > 0.7 else 'MEDIUM' if avg_coupling > 0.4 else 'LOW'],
+            ['Abstraction Level', f"{avg_abstraction:.2f}", 'LOW' if avg_abstraction < 0.2 else 'MEDIUM' if avg_abstraction < 0.4 else 'HIGH'],
+            ['Layering Violations', str(total_layering), 'HIGH' if total_layering > 10 else 'MEDIUM' if total_layering > 5 else 'LOW'],
+            ['Circular Dependencies', str(total_circular_deps), 'HIGH' if total_circular_deps > 0 else 'LOW']
+        ]
+        
+        # Apply status colors
+        status_colors = {
+            'HIGH': self.colors['danger'],
+            'MEDIUM': self.colors['warning'],
+            'LOW': self.colors['success']
         }
         
-        result = []
-        i = 0
-        while i < len(text):
-            if text[i] in chars:
-                if i > 0 and text[i-1] == '\\':  # Already escaped
-                    result.append(text[i])
-                else:
-                    result.append(chars[text[i]])
+        table_style = self.table_style
+        for i, row in enumerate(metrics_data[1:], 1):
+            status = row[2]
+            color = status_colors.get(status, self.colors['info'])
+            table_style.add('TEXTCOLOR', (2, i), (2, i), color)
+        
+        self._add_table(metrics_data, colWidths=[2*inch, 1.5*inch, 1.5*inch], style=table_style)
+        
+        # Component Coupling Distribution
+        self._add_title("Component Coupling Analysis", "SubsectionTitle")
+        
+        # Create coupling distribution chart
+        coupling_ranges = {
+            'Low (0-0.3)': 0,
+            'Medium (0.3-0.7)': 0,
+            'High (0.7-1.0)': 0
+        }
+        
+        for metrics in code_metrics.values():
+            coupling = metrics.architecture.component_coupling
+            if coupling <= 0.3:
+                coupling_ranges['Low (0-0.3)'] += 1
+            elif coupling <= 0.7:
+                coupling_ranges['Medium (0.3-0.7)'] += 1
             else:
-                result.append(text[i])
-            i += 1
-            
-        return ''.join(result)
-    
-    def _prepare_ml_data(self, stats: Dict[str, CodeMetrics]) -> Dict[str, Any]:
-        """Prepare ML-related data for the report."""
-        team_availability = self._get_team_availability()
-        analysis = self.ml_system.analyze_deployment(stats, team_availability)
+                coupling_ranges['High (0.7-1.0)'] += 1
         
-        if 'error' in analysis:
-            return self._prepare_ml_error_data(analysis)
+        drawing = Drawing(400, 200)
+        pie = Pie()
+        pie.x = 150
+        pie.y = 25
+        pie.width = 150
+        pie.height = 150
         
-        return {
-            'DEPLOYMENT_CONFIDENCE': f"{analysis['overall_confidence']*100:.1f}\\%",
-            'DEPLOYMENT_WINDOWS_TABLE': self._format_deployment_windows(
-                analysis['optimal_windows']
-            ),
-            'RESOURCE_REQUIREMENTS': self._format_resource_requirements(
-                analysis['resource_prediction']
-            ),
-            'ROLLBACK_RISK_TABLE': self._format_rollback_risks(
-                analysis['rollback_prediction']
-            ),
-            'ROLLBACK_MITIGATION': self._format_mitigation_suggestions(
-                analysis['rollback_prediction'].mitigation_suggestions
-            ),
-            'INCIDENT_PROBABILITY': f"{analysis['incident_prediction'].probability*100:.1f}\\%",
-            'INCIDENT_SEVERITY': analysis['incident_prediction'].severity_level.title(),
-            'INCIDENT_RESOLUTION_TIME': f"{analysis['incident_prediction'].estimated_resolution_time:.1f}",
-            'INCIDENT_AREAS': self._format_incident_areas(
-                analysis['incident_prediction'].potential_areas
-            ),
-            'WINDOW_EXPLANATION': self._escape_latex(analysis['window_explanation']),
-            'ROLLBACK_EXPLANATION': self._escape_latex(analysis['rollback_explanation']),
-            'RESOURCE_EXPLANATION': self._escape_latex(analysis['resource_explanation']),
-            'INCIDENT_EXPLANATION': self._escape_latex(analysis['incident_explanation']),
-            'FEATURE_INTERACTIONS': self._format_feature_interactions(analysis),
-            'FEATURE_IMPORTANCE_TABLE': self._format_feature_importance_table(analysis),
-            'CONFIDENCE_TABLE': self._format_confidence_table(analysis),
-            'CONFIDENCE_FACTORS': self._format_confidence_factors(analysis)
-        }
-
-    def _prepare_ml_error_data(self, analysis: Dict) -> Dict[str, str]:
-        """Prepare error message for ML section when analysis fails."""
-        return {
-            'DEPLOYMENT_CONFIDENCE': "N/A",
-            'DEPLOYMENT_WINDOWS_TABLE': r"Insufficient data & N/A & N/A & N/A",
-            'RESOURCE_REQUIREMENTS': r"\item Insufficient historical data for accurate prediction",
-            'ROLLBACK_RISK_TABLE': "N/A & N/A",
-            'ROLLBACK_MITIGATION': r"\item Not available due to insufficient data",
-            'INCIDENT_PROBABILITY': "N/A",
-            'INCIDENT_SEVERITY': "Unknown",
-            'INCIDENT_RESOLUTION_TIME': "N/A",
-            'INCIDENT_AREAS': r"\item Unable to determine potential incident areas",
-            'WINDOW_EXPLANATION': "Analysis failed",
-            'ROLLBACK_EXPLANATION': "Analysis failed",
-            'RESOURCE_EXPLANATION': "Analysis failed",
-            'INCIDENT_EXPLANATION': "Analysis failed",
-            'FEATURE_INTERACTIONS': r"\item No significant feature interactions detected",
-            'FEATURE_IMPORTANCE_TABLE': "No Data & 0\\% & 0",
-            'CONFIDENCE_TABLE': "No Data & 0\\%",
-            'CONFIDENCE_FACTORS': r"\item No significant confidence factors identified"
-        }
-
-    def _format_deployment_windows(self, windows: List[DeploymentWindow]) -> str:
-        """Format deployment windows for LaTeX table."""
-        rows = []
-        for window in windows:
-            start_time = window.start_time.strftime('%H:%M')
-            end_time = window.end_time.strftime('%H:%M')
-            rows.append(
-                f"{start_time}-{end_time} & "
-                f"{window.historical_success_rate*100:.1f}\\% & "
-                f"{window.team_availability*100:.1f}\\% & "
-                f"{window.risk_score*100:.1f}\\%"
-            )
-        return ' \\\\\n        '.join(rows) if rows else "No suitable windows & 0\\% & 0\\% & 0\\%"
-
-    def _format_resource_requirements(self, resource_pred: ResourceAllocation) -> str:
-        """Format resource requirements for LaTeX."""
-        if not resource_pred:
-            return r"\item No resource prediction available"
-            
-        items = [
-            f"\\item Required Team Size: {resource_pred.recommended_team_size} developers",
-            f"\\item Estimated Support Duration: {resource_pred.estimated_support_duration:.1f} hours",
-            "\\item Required Skills:",
-            "\\begin{itemize}"
+        pie.data = list(coupling_ranges.values())
+        pie.labels = list(coupling_ranges.keys())
+        
+        pie.slices.strokeWidth = 0.5
+        pie.slices[0].fillColor = self.colors['success']
+        pie.slices[1].fillColor = self.colors['warning']
+        pie.slices[2].fillColor = self.colors['danger']
+        
+        drawing.add(pie)
+        self.story.append(drawing)
+        self.story.append(Spacer(1, 20))
+        
+        # Dependency Analysis
+        self._add_title("Dependency Analysis", "SubsectionTitle")
+        
+        # Find files with circular dependencies
+        circular_deps = [
+            (file_path, metrics.architecture.circular_dependencies)
+            for file_path, metrics in code_metrics.items()
+            if metrics.architecture.circular_dependencies
         ]
         
-        for skill in sorted(resource_pred.required_skills):
-            items.append(f"  \\item {skill.replace('_', ' ').title()}")
-        
-        items.append("\\end{itemize}")
-        items.append(f"\\item Prediction Confidence: {resource_pred.confidence_score*100:.1f}\\%")
-        
-        return '\n'.join(items)
-
-    def _format_rollback_risks(self, rollback_pred: RollbackPrediction) -> str:
-        """Format rollback risks for LaTeX table."""
-        if not rollback_pred:
-            return "No Data & 0\\%"
+        if circular_deps:
+            deps_data = [['File', 'Circular Dependencies', 'Severity']]
             
-        rows = []
-        for factor, score in rollback_pred.risk_factors.items():
-            rows.append(
-                f"{factor.replace('_', ' ').title()} & "
-                f"{score*100:.1f}\\%"
-            )
-        return ' \\\\\n        '.join(rows)
-
-    def _format_mitigation_suggestions(self, suggestions: List[str]) -> str:
-        """Format mitigation suggestions for LaTeX."""
-        if not suggestions:
-            return r"\item No specific mitigation steps required"
-        return '\n'.join(f"\\item {self._escape_latex(suggestion)}" for suggestion in suggestions)
-
-    def _format_incident_areas(self, areas: List[str]) -> str:
-        """Format incident areas for LaTeX."""
-        if not areas:
-            return r"\item No specific areas of concern identified"
-        return '\n'.join(f"\\item {self._escape_latex(area)}" for area in areas)
-
-    def _format_feature_interactions(self, analysis: Dict[str, Any]) -> str:
-        """Format feature interactions for LaTeX."""
-        interactions = []
-        for model_name, pred in [
-            ('Deployment Window', analysis.get('optimal_windows', [None])[0]),
-            ('Rollback', analysis.get('rollback_prediction')),
-            ('Resource', analysis.get('resource_prediction')),
-            ('Incident', analysis.get('incident_prediction'))
-        ]:
-            if pred and hasattr(pred, 'feature_interactions') and pred.feature_interactions:
-                for interaction in list(pred.feature_interactions)[:2]:
-                    interactions.append(
-                        f"\\item {model_name}: "
-                        f"{interaction['features'][0].replace('_', ' ').title()} and "
-                        f"{interaction['features'][1].replace('_', ' ').title()} "
-                        f"(strength: {interaction['strength']:.2f})"
-                    )
-        return '\n'.join(interactions) if interactions else r"\item No significant feature interactions detected"
-
-    def _format_feature_importance_table(self, analysis: Dict[str, Any]) -> str:
-        """Format feature importance table for LaTeX."""
-        importance_rows = []
-        for feature, impact in analysis['feature_importances']['cross_model'].items():
-            # Calculate max deviation safely
-            max_dev = 0.0
-            for pred_name in ['rollback_prediction', 'resource_prediction', 'incident_prediction']:
-                pred = analysis.get(pred_name)
-                if not pred or not hasattr(pred, 'top_contributors'):
-                    continue
-                for contrib in getattr(pred, 'top_contributors', []):
-                    if contrib.get('feature') == feature:
-                        dev = abs(contrib.get('deviation', contrib.get('impact', 0.0)))
-                        max_dev = max(max_dev, dev)
+            for file_path, dependencies in circular_deps:
+                severity = 'HIGH' if len(dependencies) > 2 else 'MEDIUM'
+                deps_data.append([
+                    file_path.split('/')[-1],
+                    str(len(dependencies)),
+                    severity
+                ])
             
-            formatted_row = (
-                f"{feature.replace('_', ' ').title()} & "
-                f"{impact*100:.1f}\\% & "
-                f"{max_dev:.1f}\\sigma"
-            )
-            importance_rows.append(formatted_row)
-        
-        if not importance_rows:
-            return "No Data & 0\\% & 0"
-        
-        return ' \\\\\n'.join(importance_rows[:5])
-
-    def _format_confidence_table(self, analysis: Dict[str, Any]) -> str:
-        """Format confidence metrics table for LaTeX."""
-        confidence_rows = []
-        for aspect, score in analysis.get('confidence_breakdown', {}).items():
-            confidence_rows.append(
-                f"{aspect.replace('_', ' ').title()} & {score*100:.1f}\\%"
-            )
-        return ' \\\\\n        '.join(confidence_rows) if confidence_rows else "No Data & 0\\%"
-
-    def _format_confidence_factors(self, analysis: Dict[str, Any]) -> str:
-        """Format confidence factors for LaTeX."""
-        factors = []
-        for aspect, pred in [
-            ('Window', analysis.get('optimal_windows', [None])[0]),
-            ('Rollback', analysis.get('rollback_prediction')),
-            ('Resource', analysis.get('resource_prediction')),
-            ('Incident', analysis.get('incident_prediction'))
-        ]:
-            if pred and hasattr(pred, 'confidence_factors'):
-                for factor, present in pred.confidence_factors.get('confidence_factors', {}).items():
-                    if present:
-                        factors.append(
-                            f"\\item {factor.replace('_', ' ').title()} "
-                            f"in {aspect} prediction"
-                        )
-        return '\n'.join(factors) if factors else r"\item No significant confidence factors identified"
-
-    def _get_team_availability(self) -> Dict[str, List[time]]:
-        """Get team availability data. Override this method to provide actual data."""
-        return {
-            'team_member_1': [(time(9, 0), time(17, 0))],
-            'team_member_2': [(time(10, 0), time(18, 0))],
-            'team_member_3': [(time(8, 0), time(16, 0))]
-        }
-    
-    def _format_table_content(self, rows: List[List[str]], has_header: bool = True) -> List[List[str]]:
-        """Format table content ensuring proper LaTeX formatting."""
-        formatted_rows = []
-        
-        if has_header:
-            # Format header row
-            header = [NoEscape(r'\textbf{' + cell.strip() + '}') for cell in rows[0]]
-            formatted_rows.append(header)
-            rows = rows[1:]
-        
-        # Format data rows
-        for row in rows:
-            formatted_row = []
-            for cell in row:
-                # Handle percentage signs
-                if '%' in cell:
-                    cell = cell.replace('%', r'\%')
-                # Handle math mode
-                if any(c in cell for c in ['_', '^', '$']):
-                    cell = f"${cell}$"
-                formatted_row.append(NoEscape(cell.strip()))
-            formatted_rows.append(formatted_row)
-        
-        return formatted_rows
-
-    def _create_table(self, doc: Document, headers: List[str], rows: List[List[str]], 
-                     alignment: str = None) -> None:
-        """Create a table with proper formatting."""
-        if alignment is None:
-            alignment = 'l' * len(headers)
+            # Apply severity colors
+            table_style = self.alternating_table_style
+            for i, row in enumerate(deps_data[1:], 1):
+                severity = row[2]
+                color = status_colors.get(severity, self.colors['info'])
+                table_style.add('TEXTCOLOR', (2, i), (2, i), color)
             
-        with doc.create(Center()):
-            with doc.create(Tabular(alignment)) as table:
-                # Add header
-                table.add_hline()
-                table.add_row([NoEscape(r'\textbf{' + h + '}') for h in headers])
-                table.add_hline()
-                
-                # Add rows
-                for row in rows:
-                    table.add_row([NoEscape(cell) for cell in row])
-                
-                # Add final line
-                table.add_hline()
-
-    def _add_size_metrics_table(self, doc: Document, data: Dict[str, Any]) -> None:
-        """Add size metrics table with proper formatting."""
-        headers = ['Metric', 'Count', 'Percentage']
-        rows = []
-        
-        total_code = sum(m.lines_code for m in data['stats'].values())
-        total_comments = sum(m.lines_comment for m in data['stats'].values())
-        total_blank = sum(m.lines_blank for m in data['stats'].values())
-        total_lines = total_code + total_comments + total_blank
-        
-        if total_lines > 0:
-            for label, count in [
-                ('Code Lines', total_code),
-                ('Comment Lines', total_comments),
-                ('Blank Lines', total_blank)
-            ]:
-                percentage = f"{(count/total_lines*100):.1f}\\%"
-                rows.append([label, f"{count:,}", percentage])
+            self._add_table(deps_data, colWidths=[3*inch, 2*inch, inch], style=table_style)
+            
+            # Detailed circular dependencies
+            self._add_title("Circular Dependency Details", "SubsectionTitle")
+            for file_path, dependencies in circular_deps:
+                self._add_paragraph(f"File: {file_path}", "SubsectionTitle")
+                for dep in dependencies:
+                    self._add_paragraph(f"• Circular dependency with: {' -> '.join(dep)}")
         else:
-            rows.append(['No Code', '0', '0\\%'])
-            
-        self._create_table(doc, headers, rows, 'lrr')
-
-    def _add_risk_table(self, doc: Document, data: Dict[str, Any]) -> None:
-        """Add risk analysis table with proper formatting."""
-        risk_files = [
-            (file, m.complexity.change_risk, 
-             m.change_probability.change_frequency if m.change_probability else 0)
-            for file, m in data['stats'].items()
-            if m.complexity.change_risk > 0
+            self._add_paragraph("No circular dependencies detected in the codebase.")
+        
+        # Layering Analysis
+        self._add_title("Layering Analysis", "SubsectionTitle")
+        
+        # Find files with layering violations
+        layering_violations = [
+            (file_path, metrics.architecture.layering_violations)
+            for file_path, metrics in code_metrics.items()
+            if metrics.architecture.layering_violations > 0
         ]
         
-        headers = ['File', 'Risk Score', 'Change Frequency']
-        if not risk_files:
-            rows = [['No files', '0', '0']]
+        if layering_violations:
+            violations_data = [['File', 'Violations', 'Severity']]
+            
+            for file_path, violation_count in layering_violations:
+                severity = 'HIGH' if violation_count > 5 else 'MEDIUM' if violation_count > 2 else 'LOW'
+                violations_data.append([
+                    file_path.split('/')[-1],
+                    str(violation_count),
+                    severity
+                ])
+            
+            # Apply severity colors
+            table_style = self.alternating_table_style
+            for i, row in enumerate(violations_data[1:], 1):
+                severity = row[2]
+                color = status_colors.get(severity, self.colors['info'])
+                table_style.add('TEXTCOLOR', (2, i), (2, i), color)
+            
+            self._add_table(violations_data, colWidths=[3*inch, inch, inch], style=table_style)
         else:
-            rows = [
-                [Path(file).name, f"{risk:.1f}", str(freq)]
-                for file, risk, freq in sorted(risk_files, key=lambda x: x[1], reverse=True)[:5]
+            self._add_paragraph("No layering violations detected in the codebase.")
+        
+        # Abstraction Analysis
+        self._add_title("Abstraction Analysis", "SubsectionTitle")
+        
+        # Create abstraction metrics chart
+        drawing = Drawing(400, 200)
+        chart = VerticalBarChart()
+        chart.x = 50
+        chart.y = 50
+        chart.height = 125
+        chart.width = 300
+        
+        # Collect abstraction metrics
+        high_abstraction = sum(1 for m in code_metrics.values() if m.architecture.abstraction_level > 0.7)
+        medium_abstraction = sum(1 for m in code_metrics.values() if 0.3 < m.architecture.abstraction_level <= 0.7)
+        low_abstraction = sum(1 for m in code_metrics.values() if m.architecture.abstraction_level <= 0.3)
+        
+        chart.data = [[high_abstraction, medium_abstraction, low_abstraction]]
+        chart.categoryAxis.categoryNames = ['High', 'Medium', 'Low']
+        chart.categoryAxis.labels.boxAnchor = 'ne'
+        chart.valueAxis.valueMin = 0
+        
+        # Color coding for abstraction levels
+        chart.bars[0].fillColor = self.colors['primary']
+        
+        drawing.add(chart)
+        self.story.append(drawing)
+        self.story.append(Spacer(1, 20))
+        
+        # Architecture Recommendations
+        self._add_title("Architecture Recommendations", "SubsectionTitle")
+        
+        recommendations = []
+        
+        if avg_coupling > 0.4:
+            recommendations.append(
+                "• Consider reducing component coupling through better encapsulation and interface-based design"
+            )
+        if avg_abstraction < 0.3:
+            recommendations.append(
+                "• Increase abstraction level by introducing more interfaces and abstract classes"
+            )
+        if total_layering > 0:
+            recommendations.append(
+                "• Address layering violations to maintain proper architectural boundaries"
+            )
+        if total_circular_deps > 0:
+            recommendations.append(
+                "• Resolve circular dependencies to improve maintainability and reduce complexity"
+            )
+        
+        if recommendations:
+            for rec in recommendations:
+                self._add_paragraph(rec)
+        else:
+            self._add_paragraph("No specific architecture recommendations at this time.")
+
+    def _generate_complexity_section(self, code_metrics):
+        """Generate the complexity analysis section of the report."""
+        self._add_title("4. Complexity Analysis", "SectionTitle")
+        
+        # Overview
+        avg_cyclomatic = sum(m.complexity.cyclomatic_complexity for m in code_metrics.values()) / len(code_metrics)
+        avg_cognitive = sum(m.complexity.cognitive_complexity for m in code_metrics.values()) / len(code_metrics)
+        avg_maintainability = sum(m.complexity.maintainability_index for m in code_metrics.values()) / len(code_metrics)
+        
+        overview = f"""
+        Complexity analysis examined various aspects of code complexity across the codebase. 
+        The average cyclomatic complexity is {avg_cyclomatic:.2f}, with an average cognitive complexity 
+        of {avg_cognitive:.2f}. The overall maintainability index is {avg_maintainability:.2f}/100.
+        """
+        self._add_paragraph(overview)
+        
+        # Complexity Metrics Overview
+        self._add_title("Complexity Metrics Overview", "SubsectionTitle")
+        
+        max_nesting = max(m.complexity.max_nesting_depth for m in code_metrics.values())
+        avg_change_risk = sum(m.complexity.change_risk for m in code_metrics.values()) / len(code_metrics)
+        
+        metrics_data = [
+            ['Metric', 'Value', 'Status'],
+            ['Cyclomatic Complexity', f"{avg_cyclomatic:.2f}", 'HIGH' if avg_cyclomatic > 15 else 'MEDIUM' if avg_cyclomatic > 10 else 'LOW'],
+            ['Cognitive Complexity', f"{avg_cognitive:.2f}", 'HIGH' if avg_cognitive > 20 else 'MEDIUM' if avg_cognitive > 15 else 'LOW'],
+            ['Max Nesting Depth', str(max_nesting), 'HIGH' if max_nesting > 5 else 'MEDIUM' if max_nesting > 3 else 'LOW'],
+            ['Maintainability Index', f"{avg_maintainability:.2f}", 'LOW' if avg_maintainability < 50 else 'MEDIUM' if avg_maintainability < 75 else 'HIGH'],
+            ['Change Risk', f"{avg_change_risk:.2f}%", 'HIGH' if avg_change_risk > 75 else 'MEDIUM' if avg_change_risk > 50 else 'LOW']
+        ]
+        
+        # Apply status colors
+        status_colors = {
+            'HIGH': self.colors['danger'],
+            'MEDIUM': self.colors['warning'],
+            'LOW': self.colors['success']
+        }
+        
+        table_style = self.table_style
+        for i, row in enumerate(metrics_data[1:], 1):
+            status = row[2]
+            color = status_colors.get(status, self.colors['info'])
+            table_style.add('TEXTCOLOR', (2, i), (2, i), color)
+        
+        self._add_table(metrics_data, colWidths=[2*inch, 1.5*inch, 1.5*inch], style=table_style)
+        
+        # Complexity Distribution
+        self._add_title("Complexity Distribution", "SubsectionTitle")
+        
+        # Create complexity distribution chart
+        drawing = Drawing(400, 200)
+        chart = VerticalBarChart()
+        chart.x = 50
+        chart.y = 50
+        chart.height = 125
+        chart.width = 300
+        
+        # Group files by complexity ranges
+        complexity_ranges = {
+            'Low (0-10)': 0,
+            'Medium (11-20)': 0,
+            'High (21-30)': 0,
+            'Very High (>30)': 0
+        }
+        
+        for metrics in code_metrics.values():
+            complexity = metrics.complexity.cyclomatic_complexity
+            if complexity <= 10:
+                complexity_ranges['Low (0-10)'] += 1
+            elif complexity <= 20:
+                complexity_ranges['Medium (11-20)'] += 1
+            elif complexity <= 30:
+                complexity_ranges['High (21-30)'] += 1
+            else:
+                complexity_ranges['Very High (>30)'] += 1
+        
+        chart.data = [list(complexity_ranges.values())]
+        chart.categoryAxis.categoryNames = list(complexity_ranges.keys())
+        chart.categoryAxis.labels.boxAnchor = 'ne'
+        chart.categoryAxis.labels.angle = 30
+        chart.valueAxis.valueMin = 0
+        
+        # Color coding for complexity
+        chart.bars[0].fillColor = self.colors['primary']
+        
+        drawing.add(chart)
+        self.story.append(drawing)
+        self.story.append(Spacer(1, 20))
+        
+        # Files with High Complexity
+        self._add_title("High Complexity Files", "SubsectionTitle")
+        
+        high_complexity_files = [
+            (file_path, metrics.complexity)
+            for file_path, metrics in code_metrics.items()
+            if metrics.complexity.cyclomatic_complexity > 15
+        ]
+        
+        if high_complexity_files:
+            complexity_data = [['File', 'Cyclomatic', 'Cognitive', 'Maintainability', 'Risk Level']]
+            
+            for file_path, complexity in high_complexity_files:
+                risk_level = 'HIGH' if complexity.cyclomatic_complexity > 30 else 'MEDIUM'
+                complexity_data.append([
+                    file_path.split('/')[-1],
+                    str(complexity.cyclomatic_complexity),
+                    str(complexity.cognitive_complexity),
+                    f"{complexity.maintainability_index:.1f}",
+                    risk_level
+                ])
+            
+            # Sort by cyclomatic complexity
+            complexity_data[1:] = sorted(
+                complexity_data[1:],
+                key=lambda x: int(x[1]),
+                reverse=True
+            )
+            
+            # Apply risk level colors
+            table_style = self.alternating_table_style
+            for i, row in enumerate(complexity_data[1:], 1):
+                risk = row[4]
+                color = status_colors.get(risk, self.colors['info'])
+                table_style.add('TEXTCOLOR', (4, i), (4, i), color)
+            
+            self._add_table(complexity_data, colWidths=[2*inch, inch, inch, inch, inch], style=table_style)
+        else:
+            self._add_paragraph("No files with high complexity were found.")
+        
+        # Halstead Metrics Analysis
+        self._add_title("Halstead Metrics Analysis", "SubsectionTitle")
+        
+        # Calculate average Halstead metrics
+        avg_halstead = {
+            'volume': 0,
+            'difficulty': 0,
+            'effort': 0,
+            'vocabulary': 0,
+            'length': 0
+        }
+        
+        for metrics in code_metrics.values():
+            for key in avg_halstead:
+                avg_halstead[key] += metrics.complexity.halstead_metrics.get(key, 0)
+        
+        for key in avg_halstead:
+            avg_halstead[key] /= len(code_metrics)
+        
+        halstead_data = [
+            ['Metric', 'Average Value', 'Status'],
+            ['Program Length', f"{avg_halstead['length']:.2f}", 'MEDIUM'],
+            ['Vocabulary Size', f"{avg_halstead['vocabulary']:.2f}", 'INFO'],
+            ['Program Volume', f"{avg_halstead['volume']:.2f}", 'MEDIUM'],
+            ['Difficulty Level', f"{avg_halstead['difficulty']:.2f}", 'HIGH' if avg_halstead['difficulty'] > 30 else 'MEDIUM'],
+            ['Programming Effort', f"{avg_halstead['effort']:.2f}", 'HIGH' if avg_halstead['effort'] > 1000000 else 'MEDIUM']
+        ]
+        
+        # Apply status colors
+        table_style = self.table_style
+        for i, row in enumerate(halstead_data[1:], 1):
+            status = row[2]
+            color = status_colors.get(status, self.colors['info'])
+            table_style.add('TEXTCOLOR', (2, i), (2, i), color)
+        
+        self._add_table(halstead_data, colWidths=[2*inch, 1.5*inch, 1.5*inch], style=table_style)
+        
+        # Change Risk Analysis
+        self._add_title("Change Risk Analysis", "SubsectionTitle")
+        
+        high_risk_files = [
+            (file_path, metrics.complexity.change_risk)
+            for file_path, metrics in code_metrics.items()
+            if metrics.complexity.change_risk > 75
+        ]
+        
+        if high_risk_files:
+            risk_data = [['File', 'Risk Score', 'Risk Level']]
+            
+            for file_path, risk in high_risk_files:
+                risk_level = 'HIGH' if risk > 90 else 'MEDIUM'
+                risk_data.append([
+                    file_path.split('/')[-1],
+                    f"{risk:.1f}%",
+                    risk_level
+                ])
+            
+            # Sort by risk score
+            risk_data[1:] = sorted(
+                risk_data[1:],
+                key=lambda x: float(x[1].rstrip('%')),
+                reverse=True
+            )
+            
+            # Apply risk level colors
+            table_style = self.alternating_table_style
+            for i, row in enumerate(risk_data[1:], 1):
+                risk = row[2]
+                color = status_colors.get(risk, self.colors['info'])
+                table_style.add('TEXTCOLOR', (2, i), (2, i), color)
+            
+            self._add_table(risk_data, colWidths=[3*inch, inch, inch], style=table_style)
+        
+        # Recommendations
+        self._add_title("Complexity Recommendations", "SubsectionTitle")
+        
+        recommendations = []
+        
+        if avg_cyclomatic > 10:
+            recommendations.append(
+                "• Consider breaking down complex methods to reduce cyclomatic complexity below 10"
+            )
+        if avg_cognitive > 15:
+            recommendations.append(
+                "• Simplify complex logic flows to reduce cognitive load on developers"
+            )
+        if max_nesting > 3:
+            recommendations.append(
+                "• Reduce nesting depth through early returns and guard clauses"
+            )
+        if avg_maintainability < 75:
+            recommendations.append(
+                "• Improve code maintainability through better documentation and simpler designs"
+            )
+        if avg_change_risk > 50:
+            recommendations.append(
+                "• Focus on high-risk files during code reviews and testing"
+            )
+        if avg_halstead['difficulty'] > 30:
+            recommendations.append(
+                "• Simplify complex algorithms and reduce code volume where possible"
+            )
+        
+        if recommendations:
+            for rec in recommendations:
+                self._add_paragraph(rec)
+        else:
+            self._add_paragraph("No specific complexity recommendations at this time.")
+
+    def _generate_deployment_section(self, deployment_analysis):
+        """Generate the deployment analysis section of the report."""
+        self._add_title("5. Deployment Analysis", "SectionTitle")
+        
+        # Overview with confidence scores
+        overview = f"""
+        Deployment analysis was performed with an overall confidence of {deployment_analysis.overall_confidence * 100:.1f}%.
+        The analysis includes optimal deployment windows, rollback risk assessment, resource requirements,
+        and potential incident predictions.
+        """
+        self._add_paragraph(overview)
+        
+        # Confidence Breakdown
+        self._add_title("Analysis Confidence", "SubsectionTitle")
+        
+        confidence_data = [['Component', 'Confidence Score', 'Status']]
+        for component, score in deployment_analysis.confidence_breakdown.items():
+            status = 'HIGH' if score > 0.8 else 'MEDIUM' if score > 0.6 else 'LOW'
+            confidence_data.append([
+                component.title(),
+                f"{score * 100:.1f}%",
+                status
+            ])
+        
+        # Apply status colors
+        status_colors = {
+            'HIGH': self.colors['success'],
+            'MEDIUM': self.colors['warning'],
+            'LOW': self.colors['danger']
+        }
+        
+        table_style = self.table_style
+        for i, row in enumerate(confidence_data[1:], 1):
+            status = row[2]
+            color = status_colors.get(status, self.colors['info'])
+            table_style.add('TEXTCOLOR', (2, i), (2, i), color)
+        
+        self._add_table(confidence_data, colWidths=[2*inch, 1.5*inch, 1.5*inch], style=table_style)
+        
+        # Optimal Deployment Windows
+        if deployment_analysis.optimal_windows:
+            self._add_title("Optimal Deployment Windows", "SubsectionTitle")
+            
+            windows_data = [['Time Window', 'Risk Score', 'Team Availability', 'Status']]
+            for window in deployment_analysis.optimal_windows:
+                risk_status = 'LOW' if window.risk_score < 0.3 else 'MEDIUM' if window.risk_score < 0.7 else 'HIGH'
+                windows_data.append([
+                    f"{window.start_time.strftime('%H:%M')} - {window.end_time.strftime('%H:%M')}",
+                    f"{window.risk_score * 100:.1f}%",
+                    f"{window.team_availability * 100:.1f}%",
+                    risk_status
+                ])
+            
+            # Apply risk colors
+            table_style = self.alternating_table_style
+            for i, row in enumerate(windows_data[1:], 1):
+                status = row[3]
+                color = status_colors.get(status, self.colors['info'])
+                table_style.add('TEXTCOLOR', (3, i), (3, i), color)
+            
+            self._add_table(windows_data, colWidths=[2*inch, inch, inch, inch], style=table_style)
+            
+            # Add window explanations
+            self._add_paragraph("Window Selection Rationale:", "SubsectionTitle")
+            self._add_paragraph(deployment_analysis.optimal_windows[0].explanation)
+        
+        # Rollback Risk Analysis
+        if deployment_analysis.rollback_prediction:
+            self._add_title("Rollback Risk Analysis", "SubsectionTitle")
+            
+            rollback = deployment_analysis.rollback_prediction
+            risk_data = [
+                ['Risk Factor', 'Impact', 'Severity'],
+                ['Overall Probability', f"{rollback.probability * 100:.1f}%", rollback.severity_level.upper()]
             ]
+            
+            for factor, impact in rollback.risk_factors.items():
+                severity = 'HIGH' if impact > 0.7 else 'MEDIUM' if impact > 0.3 else 'LOW'
+                risk_data.append([
+                    factor.replace('_', ' ').title(),
+                    f"{impact * 100:.1f}%",
+                    severity
+                ])
+            
+            # Apply severity colors
+            table_style = self.alternating_table_style
+            for i, row in enumerate(risk_data[1:], 1):
+                severity = row[2]
+                color = status_colors.get(severity, self.colors['info'])
+                table_style.add('TEXTCOLOR', (2, i), (2, i), color)
+            
+            self._add_table(risk_data, colWidths=[2.5*inch, 1.5*inch, inch], style=table_style)
+            
+            # Critical files
+            if rollback.critical_files:
+                self._add_title("Critical Files", "SubsectionTitle")
+                critical_files_text = "The following files require special attention:\n" + \
+                    "\n".join(f"• {file}" for file in rollback.critical_files)
+                self._add_paragraph(critical_files_text)
         
-        self._create_table(doc, headers, rows, 'lrr')
+        # Resource Requirements
+        if deployment_analysis.resource_prediction:
+            self._add_title("Resource Requirements", "SubsectionTitle")
+            
+            resource = deployment_analysis.resource_prediction
+            resource_data = [
+                ['Resource Metric', 'Requirement', 'Notes'],
+                ['Team Size', str(resource.recommended_team_size), 'Required'],
+                ['Support Duration', f"{resource.estimated_support_duration:.1f} hours", 'Estimated'],
+            ]
+            
+            self._add_table(resource_data, colWidths=[2*inch, 1.5*inch, 1.5*inch])
+            
+            # Required skills
+            if resource.required_skills:
+                self._add_paragraph("Required Skills:", "SubsectionTitle")
+                skills_text = "\n".join(f"• {skill}" for skill in resource.required_skills)
+                self._add_paragraph(skills_text)
+        
+        # Incident Prediction
+        if deployment_analysis.incident_prediction:
+            self._add_title("Incident Prediction", "SubsectionTitle")
+            
+            incident = deployment_analysis.incident_prediction
+            incident_data = [
+                ['Metric', 'Value', 'Severity'],
+                ['Incident Probability', f"{incident.probability * 100:.1f}%", incident.severity_level.upper()],
+                ['Est. Resolution Time', f"{incident.estimated_resolution_time:.1f} hours", 'INFO']
+            ]
+            
+            # Apply severity colors
+            table_style = self.table_style
+            severity = incident.severity_level.upper()
+            color = status_colors.get(severity, self.colors['info'])
+            table_style.add('TEXTCOLOR', (2, 1), (2, 1), color)
+            
+            self._add_table(incident_data, colWidths=[2*inch, 1.5*inch, 1.5*inch], style=table_style)
+            
+            # Potential problem areas
+            if incident.potential_areas:
+                self._add_paragraph("Potential Problem Areas:", "SubsectionTitle")
+                areas_text = "\n".join(f"• {area}" for area in incident.potential_areas)
+                self._add_paragraph(areas_text)
+        
+        # Key Insights
+        if deployment_analysis.key_insights:
+            self._add_title("Key Insights", "SubsectionTitle")
+            
+            for insight in deployment_analysis.key_insights:
+                impact_color = self.colors['danger'] if insight['impact'] > 0.7 else \
+                            self.colors['warning'] if insight['impact'] > 0.3 else \
+                            self.colors['success']
+                
+                insight_text = (
+                    f"• {insight['aspect'].replace('_', ' ').title()}: "
+                    f"{insight['feature']} (Impact: {insight['impact'] * 100:.1f}%)"
+                )
+                
+                p = Paragraph(insight_text, self.styles['BodyText'])
+                p.textColor = impact_color
+                self.story.append(p)
+                self.story.append(Spacer(1, 5))
+        
+        # Feature Importance Analysis
+        if deployment_analysis.feature_importances.get('cross_model'):
+            self._add_title("Feature Importance Analysis", "SubsectionTitle")
+            
+            # Create feature importance chart
+            drawing = Drawing(400, 200)
+            chart = HorizontalLineChart()
+            chart.x = 50
+            chart.y = 50
+            chart.height = 125
+            chart.width = 300
+            
+            # Sort features by importance
+            sorted_features = sorted(
+                deployment_analysis.feature_importances['cross_model'].items(),
+                key=lambda x: x[1],
+                reverse=True
+            )[:10]  # Top 10 features
+            
+            features = [f[0] for f in sorted_features]
+            importances = [f[1] for f in sorted_features]
+            
+            chart.data = [importances]
+            chart.categoryAxis.categoryNames = features
+            chart.categoryAxis.labels.boxAnchor = 'ne'
+            chart.categoryAxis.labels.angle = 30
+            chart.valueAxis.valueMin = 0
+            chart.valueAxis.valueMax = max(importances) * 1.1
+            
+            chart.lines[0].strokeColor = self.colors['primary']
+            
+            drawing.add(chart)
+            self.story.append(drawing)
+            self.story.append(Spacer(1, 20))
+        
+        # System Explanation
+        if deployment_analysis.system_explanation:
+            self._add_title("Detailed Analysis", "SubsectionTitle")
+            self._add_paragraph(deployment_analysis.system_explanation)
+
+    def _generate_trends_section(self, code_metrics):
+        """Generate historical trends analysis section."""
+        self._add_title("6. Historical Trends", "SectionTitle")
+        
+        # Overview
+        self._add_paragraph(
+            "This section analyzes how code metrics have changed over time, identifying "
+            "trends and patterns in code quality, complexity, and maintenance."
+        )
+        
+        # Get historical metrics
+        history = getattr(code_metrics, 'history', None)
+        if not history:
+            self._add_paragraph(
+                "No historical data available for trend analysis. Consider enabling metric "
+                "history tracking for future reports."
+            )
+            return
+            
+        # Complexity Trends
+        self._add_title("Complexity Evolution", "SubsectionTitle")
+        
+        drawing = Drawing(400, 200)
+        chart = HorizontalLineChart()
+        chart.x = 50
+        chart.y = 50
+        chart.height = 125
+        chart.width = 300
+        
+        # Extract trend data
+        dates = [h['date'] for h in history]
+        avg_complexity = [h['avg_complexity'] for h in history]
+        avg_cognitive = [h['avg_cognitive_complexity'] for h in history]
+        
+        chart.data = [avg_complexity, avg_cognitive]
+        chart.lines[0].strokeColor = self.colors['primary']
+        chart.lines[1].strokeColor = self.colors['secondary']
+        
+        chart.categoryAxis.categoryNames = dates
+        chart.categoryAxis.labels.boxAnchor = 'ne'
+        chart.categoryAxis.labels.angle = 30
+        
+        # Add legend
+        legend = Legend()
+        legend.x = 380
+        legend.y = 150
+        legend.alignment = 'right'
+        legend.columnMaximum = 1
+        legend.colorNamePairs = [
+            (self.colors['primary'], 'Cyclomatic Complexity'),
+            (self.colors['secondary'], 'Cognitive Complexity')
+        ]
+        drawing.add(legend)
+        
+        drawing.add(chart)
+        self.story.append(drawing)
+        self.story.append(Spacer(1, 20))
+        
+        # Code Size Trends
+        self._add_title("Code Base Growth", "SubsectionTitle")
+        
+        drawing = Drawing(400, 200)
+        chart = HorizontalLineChart()
+        chart.x = 50
+        chart.y = 50
+        chart.height = 125
+        chart.width = 300
+        
+        total_lines = [h['total_lines'] for h in history]
+        code_lines = [h['code_lines'] for h in history]
+        
+        chart.data = [total_lines, code_lines]
+        chart.lines[0].strokeColor = self.colors['primary']
+        chart.lines[1].strokeColor = self.colors['success']
+        
+        chart.categoryAxis.categoryNames = dates
+        chart.categoryAxis.labels.boxAnchor = 'ne'
+        chart.categoryAxis.labels.angle = 30
+        
+        legend = Legend()
+        legend.x = 380
+        legend.y = 150
+        legend.alignment = 'right'
+        legend.columnMaximum = 1
+        legend.colorNamePairs = [
+            (self.colors['primary'], 'Total Lines'),
+            (self.colors['success'], 'Code Lines')
+        ]
+        drawing.add(legend)
+        
+        drawing.add(chart)
+        self.story.append(drawing)
+        self.story.append(Spacer(1, 20))
+        
+        # Issue Trends
+        self._add_title("Issue Trends", "SubsectionTitle")
+        
+        drawing = Drawing(400, 200)
+        chart = HorizontalLineChart()
+        chart.x = 50
+        chart.y = 50
+        chart.height = 125
+        chart.width = 300
+        
+        security_issues = [h['security_issues'] for h in history]
+        architecture_issues = [h['architecture_issues'] for h in history]
+        
+        chart.data = [security_issues, architecture_issues]
+        chart.lines[0].strokeColor = self.colors['danger']
+        chart.lines[1].strokeColor = self.colors['warning']
+        
+        chart.categoryAxis.categoryNames = dates
+        chart.categoryAxis.labels.boxAnchor = 'ne'
+        chart.categoryAxis.labels.angle = 30
+        
+        legend = Legend()
+        legend.x = 380
+        legend.y = 150
+        legend.alignment = 'right'
+        legend.columnMaximum = 1
+        legend.colorNamePairs = [
+            (self.colors['danger'], 'Security Issues'),
+            (self.colors['warning'], 'Architecture Issues')
+        ]
+        drawing.add(legend)
+        
+        drawing.add(chart)
+        self.story.append(drawing)
+        self.story.append(Spacer(1, 20))
+        
+        # Trend Analysis
+        self._add_title("Trend Analysis", "SubsectionTitle")
+        
+        # Calculate trend indicators
+        latest_idx = -1
+        month_ago_idx = -4 if len(history) >= 4 else 0
+        
+        metrics_trends = {
+            'Complexity': (
+                avg_complexity[latest_idx] - avg_complexity[month_ago_idx],
+                avg_complexity[latest_idx]
+            ),
+            'Code Size': (
+                (total_lines[latest_idx] - total_lines[month_ago_idx]) / total_lines[month_ago_idx] * 100,
+                total_lines[latest_idx]
+            ),
+            'Security Issues': (
+                security_issues[latest_idx] - security_issues[month_ago_idx],
+                security_issues[latest_idx]
+            ),
+            'Architecture Issues': (
+                architecture_issues[latest_idx] - architecture_issues[month_ago_idx],
+                architecture_issues[latest_idx]
+            )
+        }
+        
+        trends_data = [['Metric', 'Current Value', 'Change', 'Trend']]
+        
+        for metric, (change, current) in metrics_trends.items():
+            if metric in ['Complexity', 'Security Issues', 'Architecture Issues']:
+                trend = 'POSITIVE' if change <= 0 else 'NEGATIVE'
+            else:  # Code Size
+                trend = 'POSITIVE' if change > 0 else 'NEUTRAL'
+                
+            trends_data.append([
+                metric,
+                f"{current:.1f}",
+                f"{change:+.1f}" + ("%" if metric == 'Code Size' else ""),
+                trend
+            ])
+        
+        # Apply trend colors
+        trend_colors = {
+            'POSITIVE': self.colors['success'],
+            'NEGATIVE': self.colors['danger'],
+            'NEUTRAL': self.colors['info']
+        }
+        
+        table_style = self.alternating_table_style
+        for i, row in enumerate(trends_data[1:], 1):
+            trend = row[3]
+            color = trend_colors.get(trend, self.colors['info'])
+            table_style.add('TEXTCOLOR', (3, i), (3, i), color)
+        
+        self._add_table(trends_data, colWidths=[2*inch, 1.5*inch, inch, inch], style=table_style)
+        
+        # Trend Insights
+        self._add_title("Trend Insights", "SubsectionTitle")
+        
+        insights = []
+        
+        # Generate insights based on trends
+        if metrics_trends['Complexity'][0] > 0:
+            insights.append(
+                "• Code complexity is increasing - consider refactoring complex components"
+            )
+        else:
+            insights.append(
+                "• Code complexity is stable or decreasing - good maintenance practices"
+            )
+            
+        if metrics_trends['Code Size'][0] > 10:
+            insights.append(
+                "• Codebase is growing rapidly - ensure documentation and testing keep pace"
+            )
+            
+        if metrics_trends['Security Issues'][0] > 0:
+            insights.append(
+                "• Security issues are increasing - prioritize security fixes"
+            )
+            
+        if metrics_trends['Architecture Issues'][0] > 0:
+            insights.append(
+                "• Architecture issues are increasing - review architectural decisions"
+            )
+            
+        for insight in insights:
+            self._add_paragraph(insight)
+
+    def _generate_testing_section(self, code_metrics):
+        """Generate testing and quality metrics section."""
+        self._add_title("7. Testing & Quality Metrics", "SectionTitle")
+        
+        # Overview
+        total_files = len(code_metrics)
+        files_with_tests = sum(1 for m in code_metrics.values() if m.test_coverage_files)
+        test_coverage_ratio = files_with_tests / total_files if total_files > 0 else 0
+        
+        overview = f"""
+        Analysis of testing metrics across {total_files} files shows {files_with_tests} files 
+        ({test_coverage_ratio*100:.1f}%) have associated tests. This section provides detailed insights 
+        into test coverage, quality metrics, and testing patterns.
+        """
+        self._add_paragraph(overview)
+        
+        # Test Coverage Overview
+        self._add_title("Test Coverage Analysis", "SubsectionTitle")
+        
+        coverage_data = [
+            ['Metric', 'Value', 'Status'],
+            ['Files with Tests', f"{files_with_tests}/{total_files}", 
+            'HIGH' if test_coverage_ratio > 0.8 else 'MEDIUM' if test_coverage_ratio > 0.6 else 'LOW'],
+            ['Coverage Ratio', f"{test_coverage_ratio*100:.1f}%",
+            'HIGH' if test_coverage_ratio > 0.8 else 'MEDIUM' if test_coverage_ratio > 0.6 else 'LOW']
+        ]
+        
+        # Apply status colors
+        status_colors = {
+            'HIGH': self.colors['success'],
+            'MEDIUM': self.colors['warning'],
+            'LOW': self.colors['danger']
+        }
+        
+        table_style = self.table_style
+        for i, row in enumerate(coverage_data[1:], 1):
+            status = row[2]
+            color = status_colors.get(status, self.colors['info'])
+            table_style.add('TEXTCOLOR', (2, i), (2, i), color)
+        
+        self._add_table(coverage_data, colWidths=[2*inch, 1.5*inch, 1.5*inch], style=table_style)
+        
+        # Test Coverage Distribution
+        self._add_title("Coverage Distribution", "SubsectionTitle")
+        
+        drawing = Drawing(400, 200)
+        pie = Pie()
+        pie.x = 150
+        pie.y = 25
+        pie.width = 150
+        pie.height = 150
+        
+        coverage_dist = {
+            'No Tests': total_files - files_with_tests,
+            'With Tests': files_with_tests
+        }
+        
+        pie.data = list(coverage_dist.values())
+        pie.labels = list(coverage_dist.keys())
+        
+        pie.slices[0].fillColor = self.colors['danger']
+        pie.slices[1].fillColor = self.colors['success']
+        
+        drawing.add(pie)
+        self.story.append(drawing)
+        self.story.append(Spacer(1, 20))
+        
+        # Files Lacking Tests
+        if total_files - files_with_tests > 0:
+            self._add_title("Critical Files Lacking Tests", "SubsectionTitle")
+            
+            untested_files = [
+                (file_path, metrics)
+                for file_path, metrics in code_metrics.items()
+                if not metrics.test_coverage_files and 
+                metrics.complexity.cyclomatic_complexity > 10
+            ]
+            
+            if untested_files:
+                untested_data = [['File', 'Complexity', 'Risk Level']]
+                
+                for file_path, metrics in sorted(
+                    untested_files,
+                    key=lambda x: x[1].complexity.cyclomatic_complexity,
+                    reverse=True
+                )[:10]:  # Show top 10 most complex untested files
+                    complexity = metrics.complexity.cyclomatic_complexity
+                    risk_level = 'HIGH' if complexity > 20 else 'MEDIUM' if complexity > 15 else 'LOW'
+                    
+                    untested_data.append([
+                        file_path.split('/')[-1],
+                        str(complexity),
+                        risk_level
+                    ])
+                
+                # Apply risk colors
+                table_style = self.alternating_table_style
+                for i, row in enumerate(untested_data[1:], 1):
+                    risk = row[2]
+                    color = status_colors.get(risk, self.colors['info'])
+                    table_style.add('TEXTCOLOR', (2, i), (2, i), color)
+                
+                self._add_table(untested_data, colWidths=[3*inch, inch, inch], style=table_style)
+        
+        # Code Quality Patterns
+        self._add_title("Code Quality Patterns", "SubsectionTitle")
+        
+        patterns_data = [['Pattern', 'Occurrences', 'Impact']]
+        total_patterns = sum(
+            sum(metrics.code_patterns.values())
+            for metrics in code_metrics.values()
+        )
+        
+        if total_patterns > 0:
+            # Aggregate patterns across files
+            all_patterns = {}
+            for metrics in code_metrics.values():
+                for pattern, count in metrics.code_patterns.items():
+                    all_patterns[pattern] = all_patterns.get(pattern, 0) + count
+            
+            # Sort patterns by occurrence
+            sorted_patterns = sorted(
+                all_patterns.items(),
+                key=lambda x: x[1],
+                reverse=True
+            )
+            
+            for pattern, count in sorted_patterns:
+                impact = 'HIGH' if count > total_files * 0.5 else \
+                        'MEDIUM' if count > total_files * 0.2 else 'LOW'
+                
+                patterns_data.append([
+                    pattern.replace('_', ' ').title(),
+                    str(count),
+                    impact
+                ])
+            
+            # Apply impact colors
+            table_style = self.alternating_table_style
+            for i, row in enumerate(patterns_data[1:], 1):
+                impact = row[2]
+                color = status_colors.get(impact, self.colors['info'])
+                table_style.add('TEXTCOLOR', (2, i), (2, i), color)
+            
+            self._add_table(patterns_data, colWidths=[2.5*inch, inch, 1.5*inch], style=table_style)
+        
+        # Testing Recommendations
+        self._add_title("Testing Recommendations", "SubsectionTitle")
+        
+        recommendations = []
+        
+        if test_coverage_ratio < 0.8:
+            recommendations.append(
+                "• Increase overall test coverage - aim for at least 80% of files having tests"
+            )
+        
+        # Check for complex untested files
+        complex_untested = [
+            metrics for metrics in code_metrics.values()
+            if not metrics.test_coverage_files and 
+            metrics.complexity.cyclomatic_complexity > 15
+        ]
+        if complex_untested:
+            recommendations.append(
+                "• Prioritize adding tests for complex files with high cyclomatic complexity"
+            )
+        
+        # Check for frequently changing files without tests
+        high_churn_untested = [
+            metrics for metrics in code_metrics.values()
+            if not metrics.test_coverage_files and 
+            getattr(metrics.change_probability, 'churn_rate', 0) > 0.7
+        ]
+        if high_churn_untested:
+            recommendations.append(
+                "• Add tests for frequently modified files to prevent regression issues"
+            )
+        
+        # Check for security-critical files without tests
+        security_untested = [
+            metrics for metrics in code_metrics.values()
+            if not metrics.test_coverage_files and (
+                metrics.security.potential_sql_injections > 0 or
+                metrics.security.hardcoded_secrets > 0 or
+                len(metrics.security.vulnerable_imports) > 0
+            )
+        ]
+        if security_untested:
+            recommendations.append(
+                "• Add security-focused tests for files with potential vulnerabilities"
+            )
+        
+        # Quality pattern recommendations
+        if any(m.code_patterns.get('magic_numbers', 0) > 5 for m in code_metrics.values()):
+            recommendations.append(
+                "• Replace magic numbers with named constants to improve maintainability"
+            )
+        if any(m.code_patterns.get('large_try_blocks', 0) > 0 for m in code_metrics.values()):
+            recommendations.append(
+                "• Break down large try-catch blocks into smaller, more focused error handling"
+            )
+        if any(m.code_patterns.get('boolean_traps', 0) > 3 for m in code_metrics.values()):
+            recommendations.append(
+                "• Refactor methods with boolean parameters to improve clarity and testability"
+            )
+        
+        if recommendations:
+            for rec in recommendations:
+                self._add_paragraph(rec)
+        else:
+            self._add_paragraph("No specific testing recommendations at this time.")
