@@ -5,6 +5,7 @@ from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.platypus import PageBreak, Image, ListFlowable, ListItem
 from reportlab.graphics.shapes import Drawing
+from reportlab.graphics.charts.legends import Legend
 from reportlab.graphics.charts.linecharts import HorizontalLineChart
 from reportlab.graphics.charts.piecharts import Pie
 from reportlab.graphics.charts.barcharts import VerticalBarChart
@@ -15,8 +16,23 @@ class CodeMetricsPDFGenerator:
     """Generates comprehensive PDF reports for code analysis metrics."""
     
     def __init__(self, output_path: str, pagesize=A4):
+        """Initialize the PDF generator with basic settings."""
         self.output_path = output_path
         self.pagesize = pagesize
+        
+        # Initialize colors first since styles depend on them
+        self.colors = {
+            'primary': colors.HexColor('#1f77b4'),
+            'secondary': colors.HexColor('#ff7f0e'),
+            'danger': colors.HexColor('#d62728'),
+            'success': colors.HexColor('#2ca02c'),
+            'warning': colors.HexColor('#ffeb3b'),
+            'info': colors.HexColor('#17a2b8'),
+            'background': colors.HexColor('#f8f9fa'),
+            'text': colors.HexColor('#212529')
+        }
+        
+        # Initialize styles after colors
         self.styles = getSampleStyleSheet()
         self._setup_custom_styles()
         
@@ -33,23 +49,12 @@ class CodeMetricsPDFGenerator:
         # Story will contain all flowables
         self.story = []
         
-        # Define colors for charts and tables
-        self.colors = {
-            'primary': colors.HexColor('#1f77b4'),
-            'secondary': colors.HexColor('#ff7f0e'),
-            'danger': colors.HexColor('#d62728'),
-            'success': colors.HexColor('#2ca02c'),
-            'warning': colors.HexColor('#ffeb3b'),
-            'info': colors.HexColor('#17a2b8'),
-            'background': colors.HexColor('#f8f9fa'),
-            'text': colors.HexColor('#212529')
-        }
-        
     def _setup_custom_styles(self):
         """Set up custom paragraph and table styles."""
+        # Add our custom styles with unique names
         self.styles.add(ParagraphStyle(
             name='MainTitle',
-            parent=self.styles['Heading1'],
+            parent=self.styles['Title'],
             fontSize=24,
             spaceAfter=30,
             textColor=self.colors['text']
@@ -57,7 +62,7 @@ class CodeMetricsPDFGenerator:
         
         self.styles.add(ParagraphStyle(
             name='SectionTitle',
-            parent=self.styles['Heading2'],
+            parent=self.styles['Heading1'],
             fontSize=18,
             spaceAfter=20,
             textColor=self.colors['text']
@@ -65,14 +70,14 @@ class CodeMetricsPDFGenerator:
         
         self.styles.add(ParagraphStyle(
             name='SubsectionTitle',
-            parent=self.styles['Heading3'],
+            parent=self.styles['Heading2'],
             fontSize=14,
             spaceAfter=15,
             textColor=self.colors['text']
         ))
         
         self.styles.add(ParagraphStyle(
-            name='BodyText',
+            name='CustomBody',
             parent=self.styles['Normal'],
             fontSize=10,
             leading=14,
@@ -121,13 +126,13 @@ class CodeMetricsPDFGenerator:
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, self.colors['background']])
         ])
-    
+        
     def _add_title(self, title: str, style='MainTitle'):
         """Add a title to the document."""
         self.story.append(Paragraph(title, self.styles[style]))
         self.story.append(Spacer(1, 20))
         
-    def _add_paragraph(self, text: str, style='BodyText'):
+    def _add_paragraph(self, text: str, style='CustomBody'):
         """Add a paragraph to the document."""
         self.story.append(Paragraph(text, self.styles[style]))
         self.story.append(Spacer(1, 10))

@@ -1,3 +1,3 @@
-from .pdf_generator import PDFReportGenerator
+from .pdf_generator import CodeMetricsPDFGenerator
 
-__all__ = ['PDFReportGenerator']
+__all__ = ['CodeMetricsPDFGenerator']
