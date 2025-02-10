@@ -8,11 +8,22 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from jinja2 import Template
 from collections import Counter
-from ..models.metrics import DeploymentWindow, ResourceAllocation, RollbackPrediction, IncidentPrediction
+from ..models.metrics import (
+    DeploymentWindow, ResourceAllocation, RollbackPrediction, 
+    IncidentPrediction, CodeMetrics
+)
 
 class PDFReportGenerator:
+    """Generates comprehensive PDF reports from code analysis metrics."""
+    
     def __init__(self, template_dir: str = None, ml_system = None):
-        """Initialize the PDF report generator."""
+        """Initialize the PDF report generator.
+        
+        Args:
+            template_dir: Optional directory containing LaTeX templates.
+                        Defaults to 'templates' subdirectory.
+            ml_system: Optional ML system for deployment predictions.
+        """
         if template_dir is None:
             template_dir = os.path.join(os.path.dirname(__file__), 'templates')
         
@@ -22,100 +33,61 @@ class PDFReportGenerator:
         
         self.ml_system = ml_system
 
-    def _format_latex_path(self, path: str) -> str:
-        """Convert a path to a LaTeX-friendly format."""
-        # Convert backslashes to forward slashes
-        path = path.replace('\\', '/')
-        # Escape any special LaTeX characters
-        special_chars = {
-            '%': '\\%',
-            '$': '\\$',
-            '#': '\\#',
-            '_': '\\_',
-            '&': '\\&',
-            '{': '\\{',
-            '}': '\\}',
-            '~': '\\textasciitilde{}',
-            '^': '\\textasciicircum{}'
-        }
-        return ''.join(special_chars.get(c, c) for c in path)
-    
-    def generate_charts(self, stats: Dict, output_dir: str) -> Dict[str, str]:
-        """Generate charts and visualizations for the report."""
-        charts_dir = os.path.join(output_dir, 'charts')
-        os.makedirs(charts_dir, exist_ok=True)
-        
-        # Complexity distribution chart
-        plt.figure(figsize=(10, 6))
-        complexities = [m.complexity.cyclomatic_complexity for m in stats.values()]
-        sns.histplot(complexities, bins=20)
-        plt.title('Complexity Distribution')
-        plt.xlabel('Cyclomatic Complexity')
-        plt.ylabel('Number of Files')
-        complexity_chart = 'charts/complexity_dist.png'
-        plt.savefig(os.path.join(output_dir, complexity_chart), bbox_inches='tight', dpi=300)
-        plt.close()
-        
-        # Maintainability chart
-        plt.figure(figsize=(8, 8))
-        maintainability_scores = [m.complexity.maintainability_index for m in stats.values()]
-        categories = ['Poor (<40)', 'Fair (40-65)', 'Good (65-85)', 'Excellent (>85)']
-        counts = [
-            sum(1 for m in maintainability_scores if m < 40),
-            sum(1 for m in maintainability_scores if 40 <= m < 65),
-            sum(1 for m in maintainability_scores if 65 <= m < 85),
-            sum(1 for m in maintainability_scores if m >= 85)
-        ]
-        colors = ['#DC143C', '#FF8C00', '#4682B4', '#2E8B57']
-        plt.pie(counts, labels=categories, autopct='%1.1f%%', colors=colors)
-        plt.title('Maintainability Distribution')
-        maintainability_chart = 'charts/maintainability_pie.png'
-        plt.savefig(os.path.join(output_dir, maintainability_chart), bbox_inches='tight', dpi=300)
-        plt.close()
-        
-        # File distribution chart
-        plt.figure(figsize=(10, 6))
-        extensions = Counter(Path(file).suffix for file in stats.keys())
-        plt.bar(extensions.keys(), extensions.values())
-        plt.title('Files by Extension')
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        distribution_chart = 'charts/file_distribution.png'
-        plt.savefig(os.path.join(output_dir, distribution_chart), bbox_inches='tight', dpi=300)
-        plt.close()
-        
-        # Convert paths for LaTeX
-        return {
-            'COMPLEXITY_CHART': complexity_chart.replace('\\', '/'),
-            'MAINTAINABILITY_CHART': maintainability_chart.replace('\\', '/'),
-            'DISTRIBUTION_CHART': distribution_chart.replace('\\', '/')
-        }
-    
-    def prepare_metrics_data(self, stats: Dict) -> Dict[str, Any]:
+    def prepare_metrics_data(self, stats: Dict[str, CodeMetrics]) -> Dict[str, Any]:
         """Prepare metrics data for the report."""
-        # Get base metrics
-        data = super().prepare_metrics_data(stats)
+        # Prepare basic metrics
+        data = {
+            'TOTAL_LOC': str(sum(m.lines_code for m in stats.values())),  # Convert to string
+            'TOTAL_FILES': str(len(stats)),  # Convert to string
+            'PRIMARY_LANGUAGES': self._get_primary_languages(stats),
+            'MAINTAINABILITY_SCORE': f"{self._calculate_maintainability_score(stats):.1f}",  # Format as string
+            'KEY_FINDINGS': self._generate_key_findings(stats),
+            'SIZE_METRICS_TABLE': self._generate_size_table(stats),
+            'SECURITY_FINDINGS': self._generate_security_findings(stats),
+            'DUPLICATION_ANALYSIS': self._generate_duplication_analysis(stats),
+            'RISK_ANALYSIS_TABLE': self._generate_risk_table(stats),
+            'RECOMMENDATIONS': self._generate_recommendations(stats),
+            'DETAILED_METRICS': self._generate_detailed_metrics(stats)
+        }
         
         # Add ML analysis if available
         if self.ml_system:
-            team_availability = self._get_team_availability()  # You need to implement this
-            ml_analysis = self.ml_system.analyze_deployment(stats, team_availability)
-            
-            if 'error' not in ml_analysis:
-                # Format ML explanations
-                ml_explanations = self._format_ml_explanations(ml_analysis)
-                data.update(ml_explanations)
+            team_availability = self._get_team_availability()
+            try:
+                ml_analysis = self.ml_system.analyze_deployment(stats, team_availability)
+                ml_data = self._prepare_ml_data(stats)
+                data.update(ml_data)
+            except Exception as e:
+                print(f"Warning: ML analysis failed: {str(e)}")
+                data.update(self._prepare_ml_error_data({}))
         
         return data
 
-    def _generate_size_table(self, stats: Dict) -> str:
+    def _get_primary_languages(self, stats: Dict[str, CodeMetrics]) -> str:
+        """Get primary languages based on file extensions."""
+        extensions = Counter(Path(file).suffix.lstrip('.').upper() 
+                           for file in stats.keys())
+        top_langs = [f"{lang} ({count})" 
+                    for lang, count in extensions.most_common(3)]
+        return ', '.join(top_langs)
+
+    def _calculate_maintainability_score(self, stats: Dict[str, CodeMetrics]) -> float:
+        """Calculate overall maintainability score."""
+        if not stats:
+            return 0.0
+        return sum(m.complexity.maintainability_index 
+                  for m in stats.values()) / len(stats)
+
+    def _generate_size_table(self, stats: Dict[str, CodeMetrics]) -> str:
         """Generate the size metrics table content."""
         total_code = sum(m.lines_code for m in stats.values())
         total_comments = sum(m.lines_comment for m in stats.values())
         total_blank = sum(m.lines_blank for m in stats.values())
         total_lines = total_code + total_comments + total_blank
         
-        # Format with proper LaTeX escaping
+        if total_lines == 0:
+            return "No Code & 0 & 0\\%"
+        
         rows = [
             f"Code Lines & {total_code:,} & {(total_code/total_lines*100):.1f}\\%",
             f"Comment Lines & {total_comments:,} & {(total_comments/total_lines*100):.1f}\\%",
@@ -123,8 +95,8 @@ class PDFReportGenerator:
         ]
         
         return '\\\\\n        '.join(rows)
-    
-    def _generate_key_findings(self, stats: Dict) -> str:
+
+    def _generate_key_findings(self, stats: Dict[str, CodeMetrics]) -> str:
         """Generate key findings section."""
         findings = []
         
@@ -158,9 +130,12 @@ class PDFReportGenerator:
                 f"\\item {poor_maintainability} files have poor maintainability (MI < 40)"
             )
         
+        if not findings:
+            findings.append("\\item No critical issues found")
+        
         return '\n'.join(findings)
 
-    def _generate_security_findings(self, stats: Dict) -> str:
+    def _generate_security_findings(self, stats: Dict[str, CodeMetrics]) -> str:
         """Generate security findings section."""
         findings = []
         
@@ -168,7 +143,7 @@ class PDFReportGenerator:
         sql_injections = sum(m.security.potential_sql_injections for m in stats.values())
         secrets = sum(m.security.hardcoded_secrets for m in stats.values())
         unsafe_patterns = sum(m.security.unsafe_regex for m in stats.values())
-        vulnerable_imports = set().union(*(m.security.vulnerable_imports for m in stats.values()))
+        all_imports = set().union(*(m.security.vulnerable_imports for m in stats.values()))
         
         # Add SQL injection findings
         if sql_injections > 0:
@@ -192,13 +167,13 @@ class PDFReportGenerator:
             )
             
         # Add vulnerable import findings
-        if vulnerable_imports:
+        if all_imports:
             findings.append(
                 f"\\item {{\\color{{critical}} Vulnerable Dependencies}}: "
-                f"Found {len(vulnerable_imports)} potentially vulnerable imports:"
+                f"Found {len(all_imports)} potentially vulnerable imports:"
             )
-            for imp in sorted(vulnerable_imports):
-                findings.append(f"  \\subitem {imp}")
+            for imp in sorted(all_imports):
+                findings.append(f"  \\subitem {self._escape_latex(imp)}")
         
         # Add insecure patterns if any exist
         insecure_patterns = Counter()
@@ -219,8 +194,8 @@ class PDFReportGenerator:
             findings.append("\\item No significant security issues detected")
             
         return '\n'.join(findings)
-    
-    def _generate_duplication_analysis(self, stats: Dict) -> str:
+
+    def _generate_duplication_analysis(self, stats: Dict[str, CodeMetrics]) -> str:
         """Generate duplication analysis section."""
         total_lines = sum(m.lines_code for m in stats.values())
         duplicate_blocks = sum(
@@ -237,27 +212,28 @@ class PDFReportGenerator:
             f"Consider refactoring these sections to improve maintainability."
         )
 
-    def _generate_risk_table(self, stats: Dict) -> str:
+    def _generate_risk_table(self, stats: Dict[str, CodeMetrics]) -> str:
         """Generate risk analysis table content."""
-        # Collect all files with their risk scores
         risk_files = [
-            (file, m.complexity.change_risk, m.change_probability.change_frequency if m.change_probability else 0)
+            (file, m.complexity.change_risk, 
+             m.change_probability.change_frequency if m.change_probability else 0)
             for file, m in stats.items()
-            if m.complexity.change_risk > 0  # Show all files with any risk
+            if m.complexity.change_risk > 0
         ]
         
         if not risk_files:
             return "No files & 0 & 0"
         
-        # Sort by risk score and take top 5
         rows = []
         for file, risk, freq in sorted(risk_files, key=lambda x: x[1], reverse=True)[:5]:
             short_path = Path(file).name
-            rows.append(f"{short_path} & {risk:.1f} & {freq}")
+            rows.append(
+                f"{self._escape_latex(short_path)} & {risk:.1f} & {freq}"
+            )
         
         return '\\\\\n        '.join(rows)
 
-    def _generate_recommendations(self, stats: Dict) -> str:
+    def _generate_recommendations(self, stats: Dict[str, CodeMetrics]) -> str:
         """Generate recommendations based on analysis."""
         recommendations = []
         
@@ -315,12 +291,15 @@ class PDFReportGenerator:
         
         return '\n'.join(recommendations)
 
-    def _generate_detailed_metrics(self, stats: Dict) -> str:
+    def _generate_detailed_metrics(self, stats: Dict[str, CodeMetrics]) -> str:
         """Generate detailed metrics section."""
         sections = []
         
         # Complexity metrics
-        avg_complexity = sum(m.complexity.cyclomatic_complexity for m in stats.values()) / len(stats) if stats else 0
+        avg_complexity = (
+            sum(m.complexity.cyclomatic_complexity for m in stats.values()) / 
+            len(stats) if stats else 0
+        )
         sections.extend([
             "\\subsection{Complexity Metrics}",
             f"Average Cyclomatic Complexity: {avg_complexity:.2f}",
@@ -341,7 +320,7 @@ class PDFReportGenerator:
             ])
             for file, metrics in complex_files:
                 sections.append(
-                    f"\\item {Path(file).name}: "
+                    f"\\item {self._escape_latex(Path(file).name)}: "
                     f"Complexity = {metrics.complexity.cyclomatic_complexity}"
                 )
             sections.append("\\end{itemize}")
@@ -362,73 +341,66 @@ class PDFReportGenerator:
         doc_ratio = (total_comments / total_code * 100) if total_code > 0 else 0
         sections.append(f"\\item Documentation Coverage: {doc_ratio:.1f}\\%")
 
-        # TODO count
-        total_todos = sum(m.todo_count for m in stats.values())
-        if total_todos > 0:
-            sections.append(f"\\item Total TODO Comments: {total_todos}")
-
         sections.append("\\end{itemize}")
 
-        # Architecture metrics
+        # Change Probability Analysis
         sections.extend([
-            "\\subsection{Architecture Metrics}",
+            "\\subsection{Change Probability Analysis}",
             "\\begin{itemize}"
         ])
 
-        total_interfaces = sum(m.architecture.interface_count for m in stats.values())
-        total_abstract_classes = sum(m.architecture.abstract_class_count for m in stats.values())
-        total_violations = sum(m.architecture.layering_violations for m in stats.values())
+        # High churn files
+        high_churn_files = sorted(
+            [(file, m) for file, m in stats.items() if m.change_probability],
+            key=lambda x: x[1].change_probability.churn_rate,
+            reverse=True
+        )[:5]
 
-        sections.extend([
-            f"\\item Interfaces/Protocols: {total_interfaces}",
-            f"\\item Abstract Classes: {total_abstract_classes}",
-            f"\\item Architecture Violations: {total_violations}"
-        ])
+        if high_churn_files:
+            sections.append("High Churn Files:")
+            for file, metrics in high_churn_files:
+                sections.append(
+                    f"\\item {self._escape_latex(Path(file).name)}: "
+                    f"Churn Rate = {metrics.change_probability.churn_rate:.1f}, "
+                    f"Change Frequency = {metrics.change_probability.change_frequency}"
+                )
 
-        # Calculate average component coupling
-        avg_coupling = sum(
-            m.architecture.component_coupling 
-            for m in stats.values() 
-            if hasattr(m.architecture, 'component_coupling')
-        ) / len(stats) if stats else 0
-        sections.append(f"\\item Average Component Coupling: {avg_coupling:.2f}")
         sections.append("\\end{itemize}")
-
+        
         return '\n'.join(sections)
-    
-    def _prepare_ml_data(self, stats: Dict) -> Dict[str, Any]:
-        """Prepare ML-related data for the report."""
-        # Get deployment analysis
-        team_availability = self._get_team_availability()
-        analysis = self.ml_system.analyze_deployment(stats, team_availability)
-        
-        if 'error' in analysis:
-            return self._prepare_ml_error_data(analysis)
-        
-        return {
-            'DEPLOYMENT_CONFIDENCE': f"{analysis['overall_confidence']*100:.1f}\\%",
-            'DEPLOYMENT_WINDOWS_TABLE': self._format_deployment_windows(
-                analysis['optimal_windows']
-            ),
-            'RESOURCE_REQUIREMENTS': self._format_resource_requirements(
-                analysis['resource_prediction']
-            ),
-            'ROLLBACK_RISK_TABLE': self._format_rollback_risks(
-                analysis['rollback_prediction']
-            ),
-            'ROLLBACK_MITIGATION': self._format_mitigation_suggestions(
-                analysis['rollback_prediction'].mitigation_suggestions
-            ),
-            'INCIDENT_PROBABILITY': f"{analysis['incident_prediction'].probability*100:.1f}\\%",
-            'INCIDENT_SEVERITY': analysis['incident_prediction'].severity_level.title(),
-            'INCIDENT_RESOLUTION_TIME': f"{analysis['incident_prediction'].estimated_resolution_time:.1f}",
-            'INCIDENT_AREAS': self._format_incident_areas(
-                analysis['incident_prediction'].potential_areas
+
+    def _format_ml_explanations(self, ml_analysis: Dict[str, Any]) -> Dict[str, str]:
+        """Format ML analysis explanations for LaTeX."""
+        # Format feature importance table
+        importance_rows = []
+        for feature, impact in ml_analysis['feature_importances']['cross_model'].items():
+            max_deviation = max(
+                abs(contributor['deviation'])
+                for pred in ['rollback_prediction', 'resource_prediction', 'incident_prediction']
+                if pred in ml_analysis
+                for contributor in ml_analysis[pred].top_contributors
+                if contributor['feature'] == feature
             )
+            importance_rows.append(
+                f"{feature.replace('_', ' ').title()} & "
+                f"{impact*100:.1f}\\% & "
+                f"{max_deviation:.1f}\\sigma"
+            )
+        feature_importance_table = '\\\\\n        '.join(importance_rows[:5])
+
+        return {
+            'FEATURE_IMPORTANCE_TABLE': feature_importance_table,
+            'WINDOW_EXPLANATION': self._escape_latex(ml_analysis['window_explanation']),
+            'ROLLBACK_EXPLANATION': self._escape_latex(ml_analysis['rollback_explanation']),
+            'RESOURCE_EXPLANATION': self._escape_latex(ml_analysis['resource_explanation']),
+            'INCIDENT_EXPLANATION': self._escape_latex(ml_analysis['incident_explanation']),
+            'FEATURE_INTERACTIONS': self._format_feature_interactions(ml_analysis),
+            'CONFIDENCE_TABLE': self._format_confidence_table(ml_analysis),
+            'CONFIDENCE_FACTORS': self._format_confidence_factors(ml_analysis)
         }
 
-    def _prepare_ml_error_data(self, analysis: Dict) -> Dict[str, Any]:
-        """Prepare error message for ML section."""
+    def _prepare_ml_error_data(self, analysis: Dict) -> Dict[str, str]:
+        """Prepare error message for ML section when analysis fails."""
         return {
             'DEPLOYMENT_CONFIDENCE': "N/A",
             'DEPLOYMENT_WINDOWS_TABLE': "Insufficient data & N/A & N/A & N/A",
@@ -441,72 +413,56 @@ class PDFReportGenerator:
             'INCIDENT_AREAS': "\\item Unable to determine potential incident areas"
         }
 
-    def _format_deployment_windows(self, windows: List[DeploymentWindow]) -> str:
-        """Format deployment windows for LaTeX table."""
-        rows = []
-        for window in windows:
-            start_time = window.start_time.strftime('%H:%M')
-            end_time = window.end_time.strftime('%H:%M')
-            rows.append(
-                f"{start_time}-{end_time} & "
-                f"{window.historical_success_rate*100:.1f}\\% & "
-                f"{window.team_availability*100:.1f}\\% & "
-                f"{window.risk_score*100:.1f}\\%"
+    def _format_feature_interactions(self, ml_analysis: Dict[str, Any]) -> str:
+        """Format feature interactions for LaTeX."""
+        interactions = []
+        for model_name, pred in [
+            ('Deployment Window', ml_analysis.get('optimal_windows', [None])[0]),
+            ('Rollback', ml_analysis.get('rollback_prediction')),
+            ('Resource', ml_analysis.get('resource_prediction')),
+            ('Incident', ml_analysis.get('incident_prediction'))
+        ]:
+            if pred and hasattr(pred, 'feature_interactions'):
+                for interaction in pred.feature_interactions[:2]:  # Top 2 per model
+                    interactions.append(
+                        f"\\item {model_name}: "
+                        f"{interaction['features'][0].replace('_', ' ').title()} and "
+                        f"{interaction['features'][1].replace('_', ' ').title()} "
+                        f"(strength: {interaction['strength']:.2f})"
+                    )
+        return '\n'.join(interactions) if interactions else "\\item No significant feature interactions detected"
+
+    def _format_confidence_table(self, ml_analysis: Dict[str, Any]) -> str:
+        """Format confidence metrics table for LaTeX."""
+        confidence_rows = []
+        for aspect, score in ml_analysis.get('confidence_breakdown', {}).items():
+            confidence_rows.append(
+                f"{aspect.replace('_', ' ').title()} & {score*100:.1f}\\%"
             )
-        return '\\\\\n        '.join(rows)
+        return '\\\\\n        '.join(confidence_rows) if confidence_rows else "No Data & 0\\%"
 
-    def _format_resource_requirements(self, resource_pred: ResourceAllocation) -> str:
-        """Format resource requirements for LaTeX."""
-        items = [
-            f"\\item Required Team Size: {resource_pred.recommended_team_size} developers",
-            f"\\item Estimated Support Duration: {resource_pred.estimated_support_duration:.1f} hours",
-            "\\item Required Skills:",
-            "\\begin{itemize}"
-        ]
-        
-        for skill in sorted(resource_pred.required_skills):
-            items.append(f"  \\item {skill.replace('_', ' ').title()}")
-        
-        items.append("\\end{itemize}")
-        items.append(f"\\item Prediction Confidence: {resource_pred.confidence_score*100:.1f}\\%")
-        
-        return '\n'.join(items)
+    def _format_confidence_factors(self, ml_analysis: Dict[str, Any]) -> str:
+        """Format confidence factors for LaTeX."""
+        factors = []
+        for aspect, pred in [
+            ('Window', ml_analysis.get('optimal_windows', [None])[0]),
+            ('Rollback', ml_analysis.get('rollback_prediction')),
+            ('Resource', ml_analysis.get('resource_prediction')),
+            ('Incident', ml_analysis.get('incident_prediction'))
+        ]:
+            if pred and hasattr(pred, 'confidence_factors'):
+                for factor, present in pred.confidence_factors.get('confidence_factors', {}).items():
+                    if present:
+                        factors.append(
+                            f"\\item {factor.replace('_', ' ').title()} "
+                            f"in {aspect} prediction"
+                        )
+        return '\n'.join(factors) if factors else "\\item No significant confidence factors identified"
 
-    def _format_rollback_risks(self, rollback_pred: RollbackPrediction) -> str:
-        """Format rollback risks for LaTeX table."""
-        rows = []
-        for factor, score in rollback_pred.risk_factors.items():
-            rows.append(
-                f"{factor.replace('_', ' ').title()} & "
-                f"{score*100:.1f}\\%"
-            )
-        return '\\\\\n        '.join(rows)
-
-    def _format_mitigation_suggestions(self, suggestions: List[str]) -> str:
-        """Format mitigation suggestions for LaTeX."""
-        if not suggestions:
-            return "\\item No specific mitigation steps required"
-        return '\n'.join(f"\\item {suggestion}" for suggestion in suggestions)
-
-    def _format_incident_areas(self, areas: List[str]) -> str:
-        """Format incident areas for LaTeX."""
-        if not areas:
-            return "\\item No specific areas of concern identified"
-        return '\n'.join(f"\\item {area}" for area in areas)
-
-    def _get_team_availability(self) -> Dict[str, List[time]]:
-        """Get team availability data."""
-        # This is a placeholder - implement based on your actual data source
-        return {
-            'team_member_1': [(time(9, 0), time(17, 0))],
-            'team_member_2': [(time(10, 0), time(18, 0))],
-            'team_member_3': [(time(8, 0), time(16, 0))]
-        }
-    
     def _escape_latex(self, text: str) -> str:
         """Escape special LaTeX characters in text."""
         if not isinstance(text, str):
-            return text
+            return str(text)
             
         chars = {
             '&': '\\&',
@@ -520,14 +476,83 @@ class PDFReportGenerator:
             '^': '\\textasciicircum{}',
             '\\': '\\textbackslash{}'
         }
+        
         # Don't escape if it looks like a LaTeX command
         if text.startswith('\\') or '\\item' in text or '\\begin' in text or '\\end' in text:
             return text
             
         return ''.join(chars.get(c, c) for c in text)
 
-    def generate_pdf(self, stats: Dict, repo_url: str, output_dir: str) -> None:
-        """Generate the PDF report."""
+    def generate_charts(self, stats: Dict[str, CodeMetrics], output_dir: str) -> Dict[str, str]:
+        """Generate charts and visualizations for the report."""
+        charts_dir = os.path.join(output_dir, 'charts')
+        os.makedirs(charts_dir, exist_ok=True)
+        
+        # Use default style instead of seaborn
+        plt.style.use('default')
+        
+        # Complexity distribution chart
+        plt.figure(figsize=(10, 6))
+        complexities = [m.complexity.cyclomatic_complexity for m in stats.values()]
+        plt.hist(complexities, bins=20, edgecolor='black')
+        plt.title('Complexity Distribution')
+        plt.xlabel('Cyclomatic Complexity')
+        plt.ylabel('Number of Files')
+        complexity_chart = 'charts/complexity_dist.png'
+        plt.savefig(os.path.join(output_dir, complexity_chart), bbox_inches='tight', dpi=300)
+        plt.close()
+        
+        # Maintainability chart
+        plt.figure(figsize=(8, 8))
+        maintainability_scores = [m.complexity.maintainability_index for m in stats.values()]
+        categories = ['Poor (<40)', 'Fair (40-65)', 'Good (65-85)', 'Excellent (>85)']
+        counts = [
+            sum(1 for m in maintainability_scores if m < 40),
+            sum(1 for m in maintainability_scores if 40 <= m < 65),
+            sum(1 for m in maintainability_scores if 65 <= m < 85),
+            sum(1 for m in maintainability_scores if m >= 85)
+        ]
+        colors = ['#DC143C', '#FF8C00', '#4682B4', '#2E8B57']
+        plt.pie(counts, labels=categories, autopct='%1.1f%%', colors=colors)
+        plt.title('Maintainability Distribution')
+        maintainability_chart = 'charts/maintainability_pie.png'
+        plt.savefig(os.path.join(output_dir, maintainability_chart), bbox_inches='tight', dpi=300)
+        plt.close()
+        
+        # File distribution chart
+        plt.figure(figsize=(10, 6))
+        extensions = Counter(Path(file).suffix for file in stats.keys())
+        plt.bar(list(extensions.keys()), list(extensions.values()), color='#4682B4', edgecolor='black')
+        plt.title('Files by Extension')
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        distribution_chart = 'charts/file_distribution.png'
+        plt.savefig(os.path.join(output_dir, distribution_chart), bbox_inches='tight', dpi=300)
+        plt.close()
+        
+        # Convert paths for LaTeX
+        return {
+            'COMPLEXITY_CHART': complexity_chart.replace('\\', '/'),
+            'MAINTAINABILITY_CHART': maintainability_chart.replace('\\', '/'),
+            'DISTRIBUTION_CHART': distribution_chart.replace('\\', '/')
+        }
+
+    def _get_team_availability(self) -> Dict[str, List[time]]:
+        """Get team availability data. Override this method to provide actual data."""
+        return {
+            'team_member_1': [(time(9, 0), time(17, 0))],
+            'team_member_2': [(time(10, 0), time(18, 0))],
+            'team_member_3': [(time(8, 0), time(16, 0))]
+        }
+
+    def generate_pdf(self, stats: Dict[str, CodeMetrics], repo_url: str, output_dir: str) -> None:
+        """Generate the PDF report.
+        
+        Args:
+            stats: Dictionary mapping filenames to their CodeMetrics
+            repo_url: URL of the repository being analyzed
+            output_dir: Directory where the PDF and supporting files will be generated
+        """
         # Create output directory and ensure it exists
         output_dir = os.path.abspath(output_dir)
         os.makedirs(output_dir, exist_ok=True)
@@ -569,7 +594,6 @@ class PDFReportGenerator:
         # Compile PDF
         try:
             print("Compiling PDF...")
-            # Set up environment for LaTeX
             env = os.environ.copy()
             env['TEXINPUTS'] = f"{output_dir}:"  # Help TeX find local files
             
@@ -603,74 +627,109 @@ class PDFReportGenerator:
             print("macOS: brew install basictex")
             raise
 
-    def _format_ml_explanations(self, ml_analysis: Dict[str, Any]) -> Dict[str, str]:
-        """Format ML analysis explanations for LaTeX."""
-        # Format feature importance table
-        importance_rows = []
-        for feature, impact in ml_analysis['feature_importances']['cross_model'].items():
-            # Find maximum deviation across models for this feature
-            max_deviation = max(
-                abs(contributor['deviation'])
-                for pred in ['rollback_prediction', 'resource_prediction', 'incident_prediction']
-                if pred in ml_analysis
-                for contributor in ml_analysis[pred].top_contributors
-                if contributor['feature'] == feature
-            )
-            importance_rows.append(
-                f"{feature.replace('_', ' ').title()} & "
-                f"{impact*100:.1f}\\% & "
-                f"{max_deviation:.1f}\\sigma"
-            )
-        feature_importance_table = '\\\\\n        '.join(importance_rows[:5])  # Top 5 features
-
-        # Format individual model explanations
-        window_explanation = ml_analysis['optimal_windows'][0].explanation.replace('\n', '\\\\\n')
-        rollback_explanation = ml_analysis['rollback_prediction'].explanation.replace('\n', '\\\\\n')
-        resource_explanation = ml_analysis['resource_prediction'].explanation.replace('\n', '\\\\\n')
-        incident_explanation = ml_analysis['incident_prediction'].explanation.replace('\n', '\\\\\n')
-
-        # Format feature interactions
-        interactions = []
-        for model_name, pred in [
-            ('Deployment Window', ml_analysis['optimal_windows'][0]),
-            ('Rollback', ml_analysis['rollback_prediction']),
-            ('Resource', ml_analysis['resource_prediction']),
-            ('Incident', ml_analysis['incident_prediction'])
-        ]:
-            if hasattr(pred, 'feature_interactions'):
-                for interaction in pred.feature_interactions[:2]:  # Top 2 per model
-                    interactions.append(
-                        f"\\item {model_name}: "
-                        f"{interaction['features'][0].replace('_', ' ').title()} and "
-                        f"{interaction['features'][1].replace('_', ' ').title()} "
-                        f"(strength: {interaction['strength']:.2f})"
-                    )
-
-        # Format confidence analysis
-        confidence_rows = []
-        confidence_factors = []
-        for aspect, score in ml_analysis['confidence_breakdown'].items():
-            confidence_rows.append(
-                f"{aspect.replace('_', ' ').title()} & {score*100:.1f}\\%"
-            )
-            
-            # Add relevant confidence factors
-            if aspect in ml_analysis and hasattr(ml_analysis[aspect], 'confidence_factors'):
-                factors = ml_analysis[aspect].confidence_factors['confidence_factors']
-                for factor, present in factors.items():
-                    if present:
-                        confidence_factors.append(
-                            f"\\item {factor.replace('_', ' ').title()} "
-                            f"in {aspect.replace('_', ' ').title()}"
-                        )
-
+    def _prepare_ml_data(self, stats: Dict[str, CodeMetrics]) -> Dict[str, Any]:
+        """Prepare ML-related data for the report."""
+        team_availability = self._get_team_availability()
+        analysis = self.ml_system.analyze_deployment(stats, team_availability)
+        
+        if 'error' in analysis:
+            return self._prepare_ml_error_data(analysis)
+        
         return {
-            'FEATURE_IMPORTANCE_TABLE': feature_importance_table,
-            'WINDOW_EXPLANATION': window_explanation,
-            'ROLLBACK_EXPLANATION': rollback_explanation,
-            'RESOURCE_EXPLANATION': resource_explanation,
-            'INCIDENT_EXPLANATION': incident_explanation,
-            'FEATURE_INTERACTIONS': '\n'.join(interactions),
-            'CONFIDENCE_TABLE': '\\\\\n        '.join(confidence_rows),
-            'CONFIDENCE_FACTORS': '\n'.join(confidence_factors)
+            'DEPLOYMENT_CONFIDENCE': f"{analysis['overall_confidence']*100:.1f}\\%",
+            'DEPLOYMENT_WINDOWS_TABLE': self._format_deployment_windows(
+                analysis['optimal_windows']
+            ),
+            'RESOURCE_REQUIREMENTS': self._format_resource_requirements(
+                analysis['resource_prediction']
+            ),
+            'ROLLBACK_RISK_TABLE': self._format_rollback_risks(
+                analysis['rollback_prediction']
+            ),
+            'ROLLBACK_MITIGATION': self._format_mitigation_suggestions(
+                analysis['rollback_prediction'].mitigation_suggestions
+            ),
+            'INCIDENT_PROBABILITY': f"{analysis['incident_prediction'].probability*100:.1f}\\%",
+            'INCIDENT_SEVERITY': analysis['incident_prediction'].severity_level.title(),
+            'INCIDENT_RESOLUTION_TIME': f"{analysis['incident_prediction'].estimated_resolution_time:.1f}",
+            'INCIDENT_AREAS': self._format_incident_areas(
+                analysis['incident_prediction'].potential_areas
+            )
         }
+
+    def _format_deployment_windows(self, windows: List[DeploymentWindow]) -> str:
+        """Format deployment windows for LaTeX table."""
+        rows = []
+        for window in windows:
+            start_time = window.start_time.strftime('%H:%M')
+            end_time = window.end_time.strftime('%H:%M')
+            rows.append(
+                f"{start_time}-{end_time} & "
+                f"{window.historical_success_rate*100:.1f}\\% & "
+                f"{window.team_availability*100:.1f}\\% & "
+                f"{window.risk_score*100:.1f}\\%"
+            )
+        return '\\\\\n        '.join(rows) if rows else "No suitable windows & 0\\% & 0\\% & 0\\%"
+
+    def _format_resource_requirements(self, resource_pred: ResourceAllocation) -> str:
+        """Format resource requirements for LaTeX."""
+        if not resource_pred:
+            return "\\item No resource prediction available"
+            
+        items = [
+            f"\\item Required Team Size: {resource_pred.recommended_team_size} developers",
+            f"\\item Estimated Support Duration: {resource_pred.estimated_support_duration:.1f} hours",
+            "\\item Required Skills:",
+            "\\begin{itemize}"
+        ]
+        
+        for skill in sorted(resource_pred.required_skills):
+            items.append(f"  \\item {skill.replace('_', ' ').title()}")
+        
+        items.append("\\end{itemize}")
+        items.append(f"\\item Prediction Confidence: {resource_pred.confidence_score*100:.1f}\\%")
+        
+        return '\n'.join(items)
+
+    def _format_rollback_risks(self, rollback_pred: RollbackPrediction) -> str:
+        """Format rollback risks for LaTeX table."""
+        if not rollback_pred:
+            return "No Data & 0\\%"
+            
+        rows = []
+        for factor, score in rollback_pred.risk_factors.items():
+            rows.append(
+                f"{factor.replace('_', ' ').title()} & "
+                f"{score*100:.1f}\\%"
+            )
+        return '\\\\\n        '.join(rows)
+
+    def _format_mitigation_suggestions(self, suggestions: List[str]) -> str:
+        """Format mitigation suggestions for LaTeX."""
+        if not suggestions:
+            return "\\item No specific mitigation steps required"
+        return '\n'.join(f"\\item {self._escape_latex(suggestion)}" for suggestion in suggestions)
+
+    def _format_incident_areas(self, areas: List[str]) -> str:
+        """Format incident areas for LaTeX."""
+        if not areas:
+            return "\\item No specific areas of concern identified"
+        return '\n'.join(f"\\item {self._escape_latex(area)}" for area in areas)
+
+    def _format_latex_path(self, path: str) -> str:
+        """Convert a path to a LaTeX-friendly format."""
+        # Convert backslashes to forward slashes
+        path = path.replace('\\', '/')
+        # Escape any special LaTeX characters
+        special_chars = {
+            '%': '\\%',
+            '$': '\\$',
+            '#': '\\#',
+            '_': '\\_',
+            '&': '\\&',
+            '{': '\\{',
+            '}': '\\}',
+            '~': '\\textasciitilde{}',
+            '^': '\\textasciicircum{}'
+        }
+        return ''.join(special_chars.get(c, c) for c in path)

@@ -248,3 +248,20 @@ class ResourcePredictor(BasePredictor):
                     self.model.fit(X, y)
         except (AttributeError, TypeError, ValueError) as e:
             print(f"Error updating models: {str(e)}")
+
+    def _calculate_data_completeness(self, metrics: Dict[str, Any]) -> float:
+        """Calculate completeness score for input data."""
+        try:
+            required_fields = {'complexity', 'security', 'architecture'}
+            total_files = len(metrics.get('files', {}))
+            if total_files == 0:
+                return 0.0
+                
+            complete_files = sum(
+                1 for file_metrics in metrics['files'].values()
+                if all(field in file_metrics for field in required_fields)
+            )
+            
+            return complete_files / total_files
+        except (AttributeError, TypeError):
+            return 0.0

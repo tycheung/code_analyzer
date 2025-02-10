@@ -1,9 +1,8 @@
 from typing import Dict, Any, List, Optional
 import os
-import time
 import joblib
 import numpy as np
-from datetime import datetime
+from datetime import datetime, time
 from pathlib import Path
 
 from .window_predictor import WindowPredictor
@@ -122,7 +121,7 @@ class DeploymentMLSystem:
                 feature_importances=feature_importances,
                 system_explanation=system_explanation,
                 key_insights=key_insights,
-                timestamp=time.time(),
+                timestamp=datetime.now().timestamp(),
                 analysis_version=self.version,
                 model_versions=self._get_model_versions(),
                 data_completeness=self._calculate_data_completeness(metrics),
@@ -139,36 +138,53 @@ class DeploymentMLSystem:
     ) -> bool:
         """Validate input data completeness and format."""
         try:
+            print("Validating input data...")
             if not isinstance(metrics, dict) or not isinstance(team_availability, dict):
+                print("Failed basic type check")
                 return False
                 
             # Check metrics structure
             if 'files' not in metrics or not isinstance(metrics['files'], dict):
+                print("Failed files structure check")
                 return False
                 
             # Check team availability format
             for schedule in team_availability.values():
                 if not isinstance(schedule, list):
+                    print("Failed schedule list check")
                     return False
                     
-                # Allow either tuple or list for time windows
+                # Check each time window
                 for time_window in schedule:
                     if not isinstance(time_window, (list, tuple)) or len(time_window) != 2:
+                        print("Failed time window format check")
                         return False
-                    if not all(isinstance(t, (time, type(None))) for t in time_window):
+                    # Using datetime.time for the check
+                    if not all(isinstance(t, time) for t in time_window):
+                        print("Failed time object check")
+                        print(f"Time types: {[type(t) for t in time_window]}")
                         return False
-                        
-            # Validate files have basic required structure but allow some to be invalid
+                            
+            # Validate files have basic required structure
             valid_files = 0
-            for file_metrics in metrics['files'].values():
-                if isinstance(file_metrics, dict) and all(
-                    key in file_metrics for key in ['complexity', 'security', 'architecture']
-                ):
-                    valid_files += 1
-                    
+            for file_path, file_metrics in metrics['files'].items():
+                print(f"Checking file {file_path}...")
+                if isinstance(file_metrics, dict):
+                    required_keys = ['complexity', 'security', 'architecture']
+                    missing_keys = [key for key in required_keys if key not in file_metrics]
+                    if not missing_keys:
+                        print(f"File {file_path} is valid")
+                        valid_files += 1
+                    else:
+                        print(f"File {file_path} missing keys: {missing_keys}")
+                        
+            print(f"Valid files found: {valid_files}")
             return valid_files > 0  # Pass if we have at least one valid file
-            
-        except Exception:
+                
+        except Exception as e:
+            print(f"Validation failed with exception: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def _get_all_predictions(
@@ -372,7 +388,7 @@ class DeploymentMLSystem:
                 training_samples=self._get_training_sample_counts(),
                 feature_coverage=self._calculate_feature_coverage(),
                 recent_accuracy=self._calculate_recent_accuracy(),
-                last_update_timestamp=time.time(),
+                last_update_timestamp=datetime.now().timestamp(),
                 model_health_checks=self._perform_model_health_checks()
             )
             
@@ -419,7 +435,7 @@ class DeploymentMLSystem:
             return correct / len(recent)
         except Exception:
             return 0.0
-
+        
     def _calculate_resource_accuracy(self) -> float:
         """Calculate accuracy of resource predictions."""
         try:
@@ -704,3 +720,91 @@ class DeploymentMLSystem:
             'resource': getattr(self.resource_predictor, 'version', 'unknown'),
             'incident': getattr(self.incident_predictor, 'version', 'unknown')
         }
+    
+    def _calculate_data_completeness(self, metrics: Dict[str, Any]) -> float:
+        """Calculate data completeness score for input data."""
+        try:
+            required_fields = {'complexity', 'security', 'architecture'}
+            total_files = len(metrics.get('files', {}))
+            if total_files == 0:
+                return 0.0
+                
+            complete_files = sum(
+                1 for file_metrics in metrics['files'].values()
+                if isinstance(file_metrics, dict) and all(
+                    key in file_metrics for key in required_fields
+                )
+            )
+            
+            return complete_files / total_files
+        except Exception:
+            return 0.0
+        
+    def _assess_prediction_quality(self, predictions: Dict[str, Any]) -> Dict[str, bool]:
+        """Assess various quality factors of predictions."""
+        try:
+            if predictions.get('error'):
+                return {'error': True}
+                
+            quality = {
+                'sufficient_data': True,
+                'balanced_predictions': True,
+                'confidence_above_threshold': True,
+                'consistent_predictions': True
+            }
+            
+            # Check if we have all prediction types
+            prediction_types = ['rollback', 'resource', 'incident']
+            if not all(p in predictions for p in prediction_types):
+                quality['sufficient_data'] = False
+                return quality
+                
+            # Check confidence scores
+            confidence_scores = [
+                predictions[p].confidence_score 
+                for p in prediction_types 
+                if hasattr(predictions[p], 'confidence_score')
+            ]
+            
+            if confidence_scores:
+                avg_confidence = np.mean(confidence_scores)
+                quality['confidence_above_threshold'] = avg_confidence >= self.min_confidence_threshold
+                
+                # Check if predictions are balanced (not too extreme)
+                quality['balanced_predictions'] = all(
+                    0.1 <= getattr(predictions[p], 'probability', 0.5) <= 0.9
+                    for p in ['rollback', 'incident']
+                    if hasattr(predictions[p], 'probability')
+                )
+                
+                # Check consistency between predictions
+                quality['consistent_predictions'] = self._check_prediction_consistency(predictions)
+            
+            return quality
+            
+        except Exception:
+            return {'error': True}
+            
+    def _check_prediction_consistency(self, predictions: Dict[str, Any]) -> bool:
+        """Check if predictions are internally consistent."""
+        try:
+            rollback = predictions['rollback']
+            incident = predictions['incident']
+            resource = predictions['resource']
+            
+            # High rollback risk should correlate with high incident risk
+            if hasattr(rollback, 'probability') and hasattr(incident, 'probability'):
+                if abs(rollback.probability - incident.probability) > 0.5:
+                    return False
+                    
+            # High risk should correlate with larger team size
+            if (hasattr(rollback, 'probability') and 
+                hasattr(resource, 'recommended_team_size')):
+                if (rollback.probability > 0.7 and 
+                    resource.recommended_team_size < 3):
+                    return False
+                    
+            return True
+            
+        except Exception:
+            return True  # Default to true on error

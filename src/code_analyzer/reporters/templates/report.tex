@@ -6,7 +6,7 @@
 \usepackage{xcolor}
 \usepackage{tikz}
 \usepackage{pgfplots}
-\pgfplotsset{compat=1.18}  % Fix compatibility warning
+\pgfplotsset{compat=1.18}
 \usepackage{listings}
 \usepackage{hyperref}
 \usepackage{fancyhdr}
@@ -17,7 +17,7 @@
 \definecolor{primary}{RGB}{70,130,180}
 \definecolor{warning}{RGB}{255,140,0}
 \definecolor{critical}{RGB}{220,20,60}
-\definecolor{success}{RGB}{46,139,87}  % New color for positive metrics
+\definecolor{success}{RGB}{46,139,87}
 
 % Code listing style
 \lstset{
@@ -45,26 +45,26 @@
 \begin{titlepage}
     \begin{center}
         \vspace*{2cm}
-       
+        
         \Huge
         \textbf{Code Analysis Report}
-       
+        
         \vspace{1.5cm}
-       
+        
         \Large
         ${REPOSITORY_NAME}
-       
+        
         \vspace{1.5cm}
-       
-        \includegraphics[width=0.4\textwidth]{charts/complexity_dist.png}
-       
+        
+        \includegraphics[width=0.4\textwidth]{${COMPLEXITY_CHART}}
+        
         \vspace{1.5cm}
-       
+        
         \large
         Generated on \today
-       
+        
         \vfill
-       
+        
         \textbf{Repository URL:}\\
         \url{${REPOSITORY_URL}}
     \end{center}
@@ -104,14 +104,14 @@ ${KEY_FINDINGS}
 \subsection{Complexity Analysis}
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.8\textwidth]{charts/complexity_dist.png}
+    \includegraphics[width=0.8\textwidth]{${COMPLEXITY_CHART}}
     \caption{Distribution of Cyclomatic Complexity Across Files}
 \end{figure}
 
 \subsection{Maintainability Distribution}
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.6\textwidth]{charts/maintainability_pie.png}
+    \includegraphics[width=0.6\textwidth]{${MAINTAINABILITY_CHART}}
     \caption{Distribution of Maintainability Index}
 \end{figure}
 

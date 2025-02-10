@@ -472,3 +472,20 @@ class RollbackPredictor(BasePredictor):
         """Save trained model to disk."""
         self.MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(self.model, self.MODEL_PATH)
+    
+    def _calculate_data_completeness(self, metrics: Dict[str, Any]) -> float:
+        """Calculate completeness score for input data."""
+        try:
+            required_fields = {'complexity', 'security', 'architecture'}
+            total_files = len(metrics.get('files', {}))
+            if total_files == 0:
+                return 0.0
+                
+            complete_files = sum(
+                1 for file_metrics in metrics['files'].values()
+                if all(field in file_metrics for field in required_fields)
+            )
+            
+            return complete_files / total_files
+        except (AttributeError, TypeError):
+            return 0.0

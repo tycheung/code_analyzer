@@ -443,3 +443,55 @@ class WindowPredictor(BasePredictor):
                 
         except Exception as e:
             print(f"Error updating models: {str(e)}")
+    
+    def _calculate_data_completeness(self, metrics: Dict[str, Any]) -> float:
+        """Calculate completeness score for input data."""
+        try:
+            required_fields = {'complexity', 'security', 'architecture'}
+            total_files = len(metrics.get('files', {}))
+            if total_files == 0:
+                return 0.0
+                
+            complete_files = sum(
+                1 for file_metrics in metrics['files'].values()
+                if isinstance(file_metrics, dict) and all(
+                    field in file_metrics and 
+                    isinstance(file_metrics[field], dict) and 
+                    file_metrics[field] is not None
+                    for field in required_fields
+                )
+            )
+            
+            return complete_files / total_files
+        except Exception:
+            return 0.0
+
+    def _update_models_if_needed(self) -> None:
+        """Update prediction model with new data."""
+        if len(self.deployment_history) < self.min_samples_for_training:
+            return
+            
+        if len(self.deployment_history) % self.training_frequency != 0:
+            return
+            
+        try:
+            X = []
+            y = []
+            
+            for feedback in self.deployment_history:
+                try:
+                    features = self._extract_features(feedback.metrics)
+                    if features is not None and not np.isnan(features).any():
+                        X.append(features)
+                        y.append(float(feedback.success))
+                except Exception:
+                    continue
+                    
+            if len(X) >= self.min_samples_for_training:
+                X = np.array(X)
+                y = np.array(y)
+                self.model.fit(X, y)
+                self._save_model()
+                
+        except Exception as e:
+            print(f"Error updating models: {str(e)}")
