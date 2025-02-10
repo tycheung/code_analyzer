@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Set, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, time
 
 @dataclass
 class SecurityMetrics:
@@ -56,3 +56,47 @@ class CodeMetrics:
     test_coverage_files: Set[str] = field(default_factory=set)
     code_patterns: Dict[str, int] = field(default_factory=dict)
     change_probability: Optional[ChangeProbability] = None
+    
+@dataclass
+class DeploymentWindow:
+    start_time: time
+    end_time: time
+    risk_score: float
+    team_availability: float
+    historical_success_rate: float
+
+@dataclass
+class ResourceAllocation:
+    recommended_team_size: int
+    required_skills: Set[str]
+    estimated_support_duration: float
+    confidence_score: float
+
+@dataclass
+class RollbackPrediction:
+    probability: float
+    risk_factors: Dict[str, float]
+    mitigation_suggestions: List[str]
+    confidence_score: float
+
+@dataclass
+class IncidentPrediction:
+    probability: float
+    potential_areas: List[str]
+    severity_level: str
+    estimated_resolution_time: float
+    confidence_score: float
+
+@dataclass
+class DeploymentFeedback:
+    deployment_id: str
+    actual_deployment_time: float
+    actual_support_hours: float
+    success: bool
+    rollback_occurred: bool
+    issues_encountered: List[str]
+    support_tickets: List[str]
+    team_size: int
+    start_time: datetime
+    end_time: datetime
+    affected_services: List[str]

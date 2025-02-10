@@ -17,6 +17,7 @@
 \definecolor{primary}{RGB}{70,130,180}
 \definecolor{warning}{RGB}{255,140,0}
 \definecolor{critical}{RGB}{220,20,60}
+\definecolor{success}{RGB}{46,139,87}  % New color for positive metrics
 
 % Code listing style
 \lstset{
@@ -44,26 +45,26 @@
 \begin{titlepage}
     \begin{center}
         \vspace*{2cm}
-        
+       
         \Huge
         \textbf{Code Analysis Report}
-        
+       
         \vspace{1.5cm}
-        
+       
         \Large
         ${REPOSITORY_NAME}
-        
+       
         \vspace{1.5cm}
-        
+       
         \includegraphics[width=0.4\textwidth]{charts/complexity_dist.png}
-        
+       
         \vspace{1.5cm}
-        
+       
         \large
         Generated on \today
-        
+       
         \vfill
-        
+       
         \textbf{Repository URL:}\\
         \url{${REPOSITORY_URL}}
     \end{center}
@@ -135,6 +136,112 @@ ${DUPLICATION_ANALYSIS}
     \caption{High-Risk Files}
 \end{table}
 
+\section{Deployment Impact Analysis}
+\subsection{Deployment Confidence}
+\begin{center}
+\Large\textbf{${DEPLOYMENT_CONFIDENCE}}
+\end{center}
+\vspace{0.5cm}
+
+\subsection{Factor Analysis}
+\begin{table}[h]
+    \centering
+    \begin{tabular}{lrr}
+        \toprule
+        \textbf{Feature} & \textbf{Cross-Model Impact} & \textbf{Deviation} \\
+        \midrule
+        ${FEATURE_IMPORTANCE_TABLE} \\
+        \bottomrule
+    \end{tabular}
+    \caption{Key Influencing Factors}
+\end{table}
+
+\subsection{Model Explanations}
+\subsubsection{Deployment Window Selection}
+${WINDOW_EXPLANATION}
+
+\subsubsection{Rollback Risk Factors}
+${ROLLBACK_EXPLANATION}
+
+\subsubsection{Resource Requirements Rationale}
+${RESOURCE_EXPLANATION}
+
+\subsubsection{Incident Risk Analysis}
+${INCIDENT_EXPLANATION}
+
+\subsection{Feature Interactions}
+\begin{itemize}
+${FEATURE_INTERACTIONS}
+\end{itemize}
+
+\subsection{Confidence Analysis}
+\begin{table}[h]
+    \centering
+    \begin{tabular}{lr}
+        \toprule
+        \textbf{Aspect} & \textbf{Confidence} \\
+        \midrule
+        ${CONFIDENCE_TABLE} \\
+        \bottomrule
+    \end{tabular}
+    \caption{Prediction Confidence by Aspect}
+\end{table}
+
+\textbf{Contributing Factors:}
+\begin{itemize}
+${CONFIDENCE_FACTORS}
+\end{itemize}
+
+\subsection{Optimal Deployment Windows}
+\begin{table}[h]
+    \centering
+    \begin{tabular}{lrrr}
+        \toprule
+        \textbf{Time Window} & \textbf{Success Rate} & \textbf{Team Availability} & \textbf{Risk Score} \\
+        \midrule
+        ${DEPLOYMENT_WINDOWS_TABLE} \\
+        \bottomrule
+    \end{tabular}
+    \caption{Recommended Deployment Windows}
+\end{table}
+
+\subsection{Resource Requirements}
+\begin{itemize}
+${RESOURCE_REQUIREMENTS}
+\end{itemize}
+
+\subsection{Rollback Risk Analysis}
+\begin{table}[h]
+    \centering
+    \begin{tabular}{lr}
+        \toprule
+        \textbf{Risk Factor} & \textbf{Probability} \\
+        \midrule
+        ${ROLLBACK_RISK_TABLE} \\
+        \bottomrule
+    \end{tabular}
+    \caption{Rollback Risk Factors}
+\end{table}
+
+\textbf{Suggested Mitigation Steps:}
+\begin{itemize}
+${ROLLBACK_MITIGATION}
+\end{itemize}
+
+\subsection{Incident Analysis}
+\begin{center}
+\begin{tabular}{lr}
+    \textbf{Incident Probability:} & {\large\color{warning}${INCIDENT_PROBABILITY}} \\
+    \textbf{Severity Level:} & {\large\color{warning}${INCIDENT_SEVERITY}} \\
+    \textbf{Est. Resolution Time:} & {\large ${INCIDENT_RESOLUTION_TIME} hours}
+\end{tabular}
+\end{center}
+
+\textbf{Potential Areas of Concern:}
+\begin{itemize}
+${INCIDENT_AREAS}
+\end{itemize}
+
 \section{Recommendations}
 ${RECOMMENDATIONS}
 
@@ -152,6 +259,9 @@ This report was generated using automated code analysis tools that examine:
     \item Dependency graphs
     \item Code duplication
     \item Architecture patterns
+    \item Historical deployment data
+    \item Team availability patterns
+    \item Incident history
 \end{itemize}
 
 Each metric is calculated using industry-standard algorithms and thresholds:
@@ -160,6 +270,26 @@ Each metric is calculated using industry-standard algorithms and thresholds:
     \item Maintainability Index: SEI method
     \item Security Patterns: OWASP guidelines
     \item Code Duplication: Normalized token comparison
+    \item Deployment Risk: ML-based historical analysis
+    \item Incident Prediction: Pattern-based machine learning
+\end{itemize}
+
+\subsection{ML Model Confidence}
+The machine learning predictions in this report are based on:
+\begin{itemize}
+    \item Historical deployment patterns
+    \item Team performance metrics
+    \item Code change patterns
+    \item Incident history
+    \item System architecture evolution
+\end{itemize}
+
+Confidence scores indicate the reliability of predictions based on:
+\begin{itemize}
+    \item Data volume and quality
+    \item Historical pattern consistency
+    \item Team stability metrics
+    \item System complexity factors
 \end{itemize}
 
 \end{document}

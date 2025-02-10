@@ -32,6 +32,9 @@ aiohttp = {version = "^3.8.5", optional = true}
 aiofiles = {version = "^23.1.0", optional = true}
 PyLaTeX = "^1.4.1"
 uvicorn = "^0.34.0"
+scikit-learn = "^1.6.1"
+joblib = "^1.4.2"
+shap = "^0.46.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.2"

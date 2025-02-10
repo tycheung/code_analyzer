@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, time
 import tempfile
 import logging
 import os
@@ -15,8 +15,9 @@ import uvicorn
 
 from code_analyzer.analyzers import CodebaseAnalyzer
 from code_analyzer.reporters import PDFReportGenerator
+from code_analyzer.ml import DeploymentMLSystem  # New import
 
-# Configure logging
+# Configure logging [unchanged]
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -29,7 +30,7 @@ app = FastAPI(
     version="0.1.0"
 )
 
-# Add CORS middleware
+# Add CORS middleware [unchanged]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -38,11 +39,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files directory
+# Mount static files directory [unchanged]
 static_dir = Path(__file__).parent / 'static'
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-# Pydantic models for request validation
+# Updated Pydantic models
+class TeamAvailability(BaseModel):
+    name: str
+    hours: List[List[str]]
+
+class MLAnalysisOptions(BaseModel):
+    enabled: bool = False
+    teamAvailability: Dict[str, List[List[str]]] = Field(default_factory=dict)
+    analyzeDeploymentWindows: bool = True
+    analyzeResourceRequirements: bool = True
+    analyzeRollbackRisks: bool = True
+    analyzeIncidentPrediction: bool = True
+
 class ComparisonOptions(BaseModel):
     enabled: bool = False
     type: Optional[str] = None
@@ -55,6 +68,7 @@ class AnalysisOptions(BaseModel):
     exportJson: bool = False
     minLines: Optional[int] = None
     comparison: ComparisonOptions = Field(default_factory=ComparisonOptions)
+    mlAnalysis: Optional[MLAnalysisOptions] = None
 
 class AnalysisRequest(BaseModel):
     repoUrl: str
@@ -169,6 +183,11 @@ async def analyze_repository(request_data: AnalysisRequest, temp_dir: str) -> Di
     try:
         logger.setLevel(logging.DEBUG if request_data.options.verbose else logging.INFO)
         analyzer = CodebaseAnalyzer()
+        ml_system = None
+        
+        if request_data.options.mlAnalysis and request_data.options.mlAnalysis.enabled:
+            ml_system = DeploymentMLSystem()
+            logger.info("ML analysis system initialized")
         
         repo_dir = os.path.join(temp_dir, "repo")
         output_dir = os.path.join(temp_dir, "output")
@@ -228,7 +247,49 @@ async def analyze_repository(request_data: AnalysisRequest, temp_dir: str) -> Di
                 json.dump(comparison_results, f, indent=2)
             results['comparisonReportPath'] = comparison_report_path
 
-        if request_data.options.generatePdf:
+        # Add ML analysis results if enabled
+        if ml_system and request_data.options.mlAnalysis:
+            logger.info("Performing ML-based deployment analysis")
+            ml_options = request_data.options.mlAnalysis
+            
+            # Convert team availability times to datetime.time objects
+            team_availability = {}
+            for name, hours in ml_options.teamAvailability.items():
+                team_availability[name] = [
+                    (datetime.strptime(start, '%H:%M').time(),
+                     datetime.strptime(end, '%H:%M').time())
+                    for start, end in hours
+                ]
+            
+            ml_results = ml_system.analyze_deployment(
+                analyzer.stats,
+                team_availability
+            )
+            
+            results['mlAnalysis'] = ml_results
+            logger.info("ML analysis completed")
+
+            # Generate PDF with ML insights
+            if request_data.options.generatePdf:
+                pdf_dir = os.path.join(output_dir, "pdf")
+                os.makedirs(pdf_dir, exist_ok=True)
+                
+                logger.info("Generating PDF report with ML insights")
+                report_generator = PDFReportGenerator(ml_system=ml_system)
+                await report_generator.generate_pdf(
+                    analyzer.stats,
+                    request_data.repoUrl,
+                    pdf_dir,
+                    comparison_results
+                )
+                
+                pdf_path = os.path.join(pdf_dir, "report.pdf")
+                if os.path.exists(pdf_path):
+                    results['pdfPath'] = pdf_path
+                    logger.info(f"PDF report generated: {pdf_path}")
+
+        # Generate standard PDF if ML is not enabled
+        elif request_data.options.generatePdf:
             pdf_dir = os.path.join(output_dir, "pdf")
             os.makedirs(pdf_dir, exist_ok=True)
             

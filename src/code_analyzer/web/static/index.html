@@ -51,6 +51,127 @@
             text-align: center;
             margin-bottom: 30px;
         }
+
+        /* ML Analysis Styles */
+        .ml-section {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background-color: var(--light-bg);
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .team-member {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .team-member .member-name {
+            flex: 2;
+        }
+
+        .time-range {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .time-range input[type="time"] {
+            width: 100px;
+        }
+
+        .add-member {
+            padding: 4px 12px;
+            background-color: var(--success-color);
+        }
+
+        /* ML Results Styles */
+        .ml-results {
+            margin-top: 2rem;
+        }
+
+        .deployment-timeline {
+            height: 200px;
+            margin: 1rem 0;
+            padding: 1rem;
+            background: white;
+            border-radius: 4px;
+            box-shadow: var(--shadow);
+        }
+
+        .resource-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .resource-card {
+            background: white;
+            padding: 1rem;
+            border-radius: 4px;
+            box-shadow: var(--shadow);
+        }
+
+        .risk-gauge {
+            height: 150px;
+            margin: 1rem 0;
+        }
+
+        .risk-factors {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .risk-factor {
+            background: white;
+            padding: 1rem;
+            border-radius: 4px;
+            box-shadow: var(--shadow);
+        }
+
+        .incident-summary {
+            background: white;
+            padding: 1rem;
+            border-radius: 4px;
+            box-shadow: var(--shadow);
+            margin-bottom: 1rem;
+        }
+
+        .potential-areas {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .confidence-scores {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .confidence-card {
+            background: white;
+            padding: 1rem;
+            border-radius: 4px;
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+
+        .confidence-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 0.5rem 0;
+        }
+
+        .confidence-high { color: var(--success-color); }
+        .confidence-medium { color: var(--warning-color); }
+        .confidence-low { color: var(--error-color); }
     </style>
 </head>
 
@@ -438,6 +559,95 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- ML-Based Deployment Analysis Section -->
+        <div class="form-group">
+            <h3>Deployment Analysis</h3>
+            <div class="options-grid">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="enable-ml-analysis" checked>
+                    <label for="enable-ml-analysis">Enable ML-Based Deployment Analysis</label>
+                </div>
+            </div>
+
+            <div id="ml-options" class="ml-section">
+                <!-- Team Availability Section -->
+                <div class="team-availability">
+                    <h4>Team Availability</h4>
+                    <div id="team-members">
+                        <div class="team-member">
+                            <input type="text" placeholder="Team Member Name" class="member-name">
+                            <div class="time-range">
+                                <input type="time" class="available-from" value="09:00">
+                                <span>to</span>
+                                <input type="time" class="available-to" value="17:00">
+                            </div>
+                            <button onclick="addTeamMember()" class="add-member">+</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ML Analysis Options -->
+                <div class="analysis-preferences">
+                    <h4>Analysis Preferences</h4>
+                    <div class="checkbox-grid">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="analyze-deployment-windows" checked>
+                            <label for="analyze-deployment-windows">Optimal Deployment Windows</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="analyze-resource-requirements" checked>
+                            <label for="analyze-resource-requirements">Resource Requirements</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="analyze-rollback-risks" checked>
+                            <label for="analyze-rollback-risks">Rollback Risk Analysis</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="analyze-incident-prediction" checked>
+                            <label for="analyze-incident-prediction">Incident Prediction</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ML Results Section -->
+        <div id="ml-results" class="ml-results" style="display: none;">
+            <h3>Deployment Analysis Results</h3>
+            
+            <!-- Deployment Windows -->
+            <div id="deployment-windows" class="ml-section">
+                <h4>Optimal Deployment Windows</h4>
+                <div class="deployment-timeline"></div>
+            </div>
+
+            <!-- Resource Requirements -->
+            <div id="resource-requirements" class="ml-section">
+                <h4>Resource Requirements</h4>
+                <div class="resource-cards"></div>
+            </div>
+
+            <!-- Rollback Risk Analysis -->
+            <div id="rollback-analysis" class="ml-section">
+                <h4>Rollback Risk Analysis</h4>
+                <div class="risk-gauge"></div>
+                <div class="risk-factors"></div>
+            </div>
+
+            <!-- Incident Prediction -->
+            <div id="incident-prediction" class="ml-section">
+                <h4>Incident Prediction</h4>
+                <div class="incident-summary"></div>
+                <div class="potential-areas"></div>
+            </div>
+
+            <!-- Confidence Scores -->
+            <div id="ml-confidence" class="ml-section">
+                <h4>Prediction Confidence</h4>
+                <div class="confidence-scores"></div>
             </div>
         </div>
 
@@ -1001,6 +1211,317 @@
             
             document.getElementById('start-date').value = lastMonth.toISOString().split('T')[0];
             document.getElementById('end-date').value = today.toISOString().split('T')[0];
+        });
+
+        // ML Analysis Functions
+        function collectMLOptions() {
+            if (!document.getElementById('enable-ml-analysis').checked) {
+                return null;
+            }
+
+            // Collect team availability
+            const teamAvailability = {};
+            document.querySelectorAll('.team-member').forEach(member => {
+                const name = member.querySelector('.member-name').value;
+                const from = member.querySelector('.available-from').value;
+                const to = member.querySelector('.available-to').value;
+                if (name) {
+                    teamAvailability[name] = [[from, to]];
+                }
+            });
+
+            return {
+                enabled: true,
+                teamAvailability: teamAvailability,
+                analyzeDeploymentWindows: document.getElementById('analyze-deployment-windows').checked,
+                analyzeResourceRequirements: document.getElementById('analyze-resource-requirements').checked,
+                analyzeRollbackRisks: document.getElementById('analyze-rollback-risks').checked,
+                analyzeIncidentPrediction: document.getElementById('analyze-incident-prediction').checked
+            };
+        }
+
+        function addTeamMember() {
+            const teamMembers = document.getElementById('team-members');
+            const newMember = document.createElement('div');
+            newMember.className = 'team-member';
+            newMember.innerHTML = `
+                <input type="text" placeholder="Team Member Name" class="member-name">
+                <div class="time-range">
+                    <input type="time" class="available-from" value="09:00">
+                    <span>to</span>
+                    <input type="time" class="available-to" value="17:00">
+                </div>
+                <button onclick="this.parentElement.remove()" class="remove-member">-</button>
+            `;
+            teamMembers.appendChild(newMember);
+        }
+
+        function displayMLResults(results) {
+            const mlResults = document.getElementById('ml-results');
+            if (!results.mlAnalysis) {
+                mlResults.style.display = 'none';
+                return;
+            }
+
+            mlResults.style.display = 'block';
+            
+            // Display deployment windows
+            if (results.mlAnalysis.optimalWindows) {
+                displayDeploymentWindows(results.mlAnalysis.optimalWindows);
+            }
+            
+            // Display resource requirements
+            if (results.mlAnalysis.resourcePrediction) {
+                displayResourceRequirements(results.mlAnalysis.resourcePrediction);
+            }
+            
+            // Display rollback analysis
+            if (results.mlAnalysis.rollbackPrediction) {
+                displayRollbackAnalysis(results.mlAnalysis.rollbackPrediction);
+            }
+            
+            // Display incident prediction
+            if (results.mlAnalysis.incidentPrediction) {
+                displayIncidentPrediction(results.mlAnalysis.incidentPrediction);
+            }
+            
+            // Display confidence scores
+            displayConfidenceScores(results.mlAnalysis.confidenceScores);
+        }
+
+        function displayDeploymentWindows(windows) {
+            const container = document.querySelector('.deployment-timeline');
+            // Create a timeline visualization using Chart.js
+            const canvas = document.createElement('canvas');
+            container.innerHTML = '';
+            container.appendChild(canvas);
+
+            new Chart(canvas, {
+                type: 'horizontalBar',
+                data: {
+                    labels: windows.map(w => `${w.startTime}-${w.endTime}`),
+                    datasets: [{
+                        label: 'Success Rate',
+                        data: windows.map(w => w.successRate * 100),
+                        backgroundColor: windows.map(w => 
+                            w.riskScore < 0.3 ? 'rgba(46, 204, 113, 0.2)' :
+                            w.riskScore < 0.7 ? 'rgba(241, 196, 15, 0.2)' :
+                            'rgba(231, 76, 60, 0.2)'
+                        )
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        }
+
+        function displayResourceRequirements(resources) {
+            const container = document.querySelector('.resource-cards');
+            container.innerHTML = `
+                <div class="resource-card">
+                    <h5>Team Size</h5>
+                    <div class="resource-value">${resources.recommendedTeamSize} developers</div>
+                </div>
+                <div class="resource-card">
+                    <h5>Support Duration</h5>
+                    <div class="resource-value">${resources.estimatedSupportDuration} hours</div>
+                </div>
+                <div class="resource-card">
+                    <h5>Required Skills</h5>
+                    <ul>
+                        ${resources.requiredSkills.map(skill => 
+                            `<li>${skill.replace('_', ' ').toUpperCase()}</li>`
+                        ).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+
+        function displayRollbackAnalysis(rollback) {
+            // Display risk gauge
+            const gaugeContainer = document.querySelector('.risk-gauge');
+            gaugeContainer.innerHTML = '';
+            const canvas = document.createElement('canvas');
+            gaugeContainer.appendChild(canvas);
+
+            new Chart(canvas, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Risk', 'Safe'],
+                    datasets: [{
+                        data: [rollback.probability * 100, 100 - (rollback.probability * 100)],
+                        backgroundColor: [
+                            'rgba(231, 76, 60, 0.8)',
+                            'rgba(46, 204, 113, 0.8)'
+                        ]
+                    }]
+                },
+                options: {
+                    circumference: 180,
+                    rotation: -90,
+                    cutout: '80%'
+                }
+            });
+
+            // Display risk factors
+            const factorsContainer = document.querySelector('.risk-factors');
+            factorsContainer.innerHTML = '';
+            Object.entries(rollback.riskFactors).forEach(([factor, score]) => {
+                const div = document.createElement('div');
+                div.className = 'risk-factor';
+                div.innerHTML = `
+                    <h5>${factor.replace('_', ' ').toUpperCase()}</h5>
+                    <div class="risk-score">${(score * 100).toFixed(1)}%</div>
+                `;
+                factorsContainer.appendChild(div);
+            });
+        }
+
+        function displayIncidentPrediction(prediction) {
+            const summary = document.querySelector('.incident-summary');
+            summary.innerHTML = `
+                <div class="incident-header">
+                    <h5>Overall Risk: ${(prediction.probability * 100).toFixed(1)}%</h5>
+                    <div class="severity ${prediction.severityLevel.toLowerCase()}">
+                        ${prediction.severityLevel.toUpperCase()}
+                    </div>
+                </div>
+                <div class="resolution-time">
+                    Estimated Resolution: ${prediction.estimatedResolutionTime} hours
+                </div>
+            `;
+
+            const areasContainer = document.querySelector('.potential-areas');
+            areasContainer.innerHTML = '';
+            prediction.potentialAreas.forEach(area => {
+                const div = document.createElement('div');
+                div.className = 'potential-area';
+                div.textContent = area;
+                areasContainer.appendChild(div);
+            });
+        }
+
+        function displayConfidenceScores(scores) {
+            const container = document.querySelector('.confidence-scores');
+            container.innerHTML = '';
+            
+            Object.entries(scores).forEach(([metric, score]) => {
+                const confidenceLevel = 
+                    score >= 0.8 ? 'high' :
+                    score >= 0.6 ? 'medium' : 'low';
+                
+                const div = document.createElement('div');
+                div.className = 'confidence-card';
+                div.innerHTML = `
+                    <h5>${metric.replace('_', ' ').toUpperCase()}</h5>
+                    <div class="confidence-value confidence-${confidenceLevel}">
+                        ${(score * 100).toFixed(1)}%
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // Modify the existing startAnalysis function to include ML options
+        async function startAnalysis() {
+            const repoUrl = document.getElementById('repo-url').value;
+            if (!repoUrl) {
+                showAlert('Please enter a repository URL', 'error');
+                return;
+            }
+
+            const analyzeBtn = document.getElementById('analyze-btn');
+            const progress = document.getElementById('progress');
+            const logOutput = document.getElementById('log-output');
+            const outputSection = document.getElementById('output-section');
+            const mlResults = document.getElementById('ml-results');
+
+            // Reset UI
+            analyzeBtn.disabled = true;
+            progress.className = 'progress visible';
+            logOutput.className = 'log-output visible';
+            outputSection.className = 'output-section';
+            mlResults.style.display = 'none';
+            logContent = [];
+
+            // Collect all options
+            const options = {
+                outputDir: document.getElementById('output-dir').value,
+                minLines: parseInt(document.getElementById('min-lines').value),
+                generatePdf: document.getElementById('generate-pdf').checked,
+                exportJson: document.getElementById('export-json').checked,
+                verbose: document.getElementById('verbose').checked,
+                comparison: collectComparisonOptions(),
+                mlAnalysis: collectMLOptions()  // Add ML options
+            };
+
+            try {
+                log('Starting analysis...');
+                log(`Repository: ${repoUrl}`);
+                log(`Options: ${JSON.stringify(options, null, 2)}`);
+
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        repoUrl: repoUrl,
+                        options: options
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Analysis failed: ${response.statusText}`);
+                }
+
+                analysisData = await response.json();
+                
+                // Show results
+                outputSection.className = 'output-section visible';
+                
+                // Handle comparison results if present
+                if (analysisData.comparison) {
+                    displayComparisonResults(analysisData.comparison);
+                    document.getElementById('download-comparison').style.display = 'block';
+                }
+
+                // Handle ML results if present
+                if (analysisData.mlAnalysis) {
+                    displayMLResults(analysisData.mlAnalysis);
+                }
+
+                showAlert('Analysis completed successfully!', 'success');
+                log('Analysis complete! You can now download the reports.');
+                
+            } catch (error) {
+                showAlert(error.message, 'error');
+                log(`Error: ${error.message}`);
+            } finally {
+                analyzeBtn.disabled = false;
+                progress.className = 'progress';
+            }
+        }
+
+        // Add event listeners for ML options
+        document.addEventListener('DOMContentLoaded', function() {
+            // Existing event listeners...
+
+            // ML analysis enable/disable handler
+            document.getElementById('enable-ml-analysis').addEventListener('change', function() {
+                document.getElementById('ml-options').style.display = 
+                    this.checked ? 'block' : 'none';
+            });
+
+            // Add initial team member
+            addTeamMember();
         });
     </script>
 </body>

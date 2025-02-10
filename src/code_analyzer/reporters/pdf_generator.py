@@ -3,14 +3,15 @@ import subprocess
 import shutil
 from typing import Dict, Any, List
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, time
 import matplotlib.pyplot as plt
 import seaborn as sns
 from jinja2 import Template
 from collections import Counter
+from ..models.metrics import DeploymentWindow, ResourceAllocation, RollbackPrediction, IncidentPrediction
 
 class PDFReportGenerator:
-    def __init__(self, template_dir: str = None):
+    def __init__(self, template_dir: str = None, ml_system = None):
         """Initialize the PDF report generator."""
         if template_dir is None:
             template_dir = os.path.join(os.path.dirname(__file__), 'templates')
@@ -18,8 +19,10 @@ class PDFReportGenerator:
         template_path = os.path.join(template_dir, 'report.tex')
         with open(template_path, 'r', encoding='utf-8') as f:
             self.template = f.read()
+        
+        self.ml_system = ml_system
 
-    def _format_latex_path(self, path: str) -> str:  # Added self parameter
+    def _format_latex_path(self, path: str) -> str:
         """Convert a path to a LaTeX-friendly format."""
         # Convert backslashes to forward slashes
         path = path.replace('\\', '/')
@@ -36,7 +39,7 @@ class PDFReportGenerator:
             '^': '\\textasciicircum{}'
         }
         return ''.join(special_chars.get(c, c) for c in path)
-
+    
     def generate_charts(self, stats: Dict, output_dir: str) -> Dict[str, str]:
         """Generate charts and visualizations for the report."""
         charts_dir = os.path.join(output_dir, 'charts')
@@ -87,38 +90,23 @@ class PDFReportGenerator:
             'MAINTAINABILITY_CHART': maintainability_chart.replace('\\', '/'),
             'DISTRIBUTION_CHART': distribution_chart.replace('\\', '/')
         }
-
+    
     def prepare_metrics_data(self, stats: Dict) -> Dict[str, Any]:
         """Prepare metrics data for the report."""
-        total_loc = sum(m.lines_code for m in stats.values())
-        total_files = len(stats)
+        # Get base metrics
+        data = super().prepare_metrics_data(stats)
         
-        # Language distribution
-        extensions = Counter(Path(file).suffix for file in stats.keys())
-        primary_languages = ', '.join(
-            f"{ext[1:].upper()}: {count}" 
-            for ext, count in extensions.most_common(3)
-        )
+        # Add ML analysis if available
+        if self.ml_system:
+            team_availability = self._get_team_availability()  # You need to implement this
+            ml_analysis = self.ml_system.analyze_deployment(stats, team_availability)
+            
+            if 'error' not in ml_analysis:
+                # Format ML explanations
+                ml_explanations = self._format_ml_explanations(ml_analysis)
+                data.update(ml_explanations)
         
-        # Calculate average maintainability
-        avg_maintainability = (
-            sum(m.complexity.maintainability_index for m in stats.values()) / total_files
-            if total_files > 0 else 0
-        )
-        
-        return {
-            'TOTAL_LOC': f"{total_loc:,}",
-            'TOTAL_FILES': f"{total_files:,}",
-            'PRIMARY_LANGUAGES': primary_languages,
-            'MAINTAINABILITY_SCORE': f"{avg_maintainability:.1f}",
-            'SIZE_METRICS_TABLE': self._generate_size_table(stats),
-            'KEY_FINDINGS': self._generate_key_findings(stats),
-            'SECURITY_FINDINGS': self._generate_security_findings(stats),
-            'DUPLICATION_ANALYSIS': self._generate_duplication_analysis(stats),
-            'RISK_ANALYSIS_TABLE': self._generate_risk_table(stats),
-            'RECOMMENDATIONS': self._generate_recommendations(stats),
-            'DETAILED_METRICS': self._generate_detailed_metrics(stats)
-        }
+        return data
 
     def _generate_size_table(self, stats: Dict) -> str:
         """Generate the size metrics table content."""
@@ -135,7 +123,7 @@ class PDFReportGenerator:
         ]
         
         return '\\\\\n        '.join(rows)
-
+    
     def _generate_key_findings(self, stats: Dict) -> str:
         """Generate key findings section."""
         findings = []
@@ -231,7 +219,7 @@ class PDFReportGenerator:
             findings.append("\\item No significant security issues detected")
             
         return '\n'.join(findings)
-
+    
     def _generate_duplication_analysis(self, stats: Dict) -> str:
         """Generate duplication analysis section."""
         total_lines = sum(m.lines_code for m in stats.values())
@@ -406,56 +394,115 @@ class PDFReportGenerator:
         sections.append(f"\\item Average Component Coupling: {avg_coupling:.2f}")
         sections.append("\\end{itemize}")
 
-        # Change probability analysis
-        sections.extend([
-            "\\subsection{Change Probability Analysis}",
-            "\\begin{itemize}"
-        ])
-
-        # High-risk files (by change probability)
-        high_risk_files = [
-            (file, m.change_probability)
-            for file, m in stats.items()
-            if m.change_probability and m.complexity.change_risk > 70
-        ]
-
-        if high_risk_files:
-            sections.append("\\item High-Risk Files (>70\\% change risk):")
-            sections.append("\\begin{itemize}")
-            for file, change_prob in sorted(
-                high_risk_files,
-                key=lambda x: x[1].change_frequency,
-                reverse=True
-            )[:5]:
-                sections.append(
-                    f"\\item {Path(file).name}: "
-                    f"Changed {change_prob.change_frequency} times by "
-                    f"{len(change_prob.contributors)} contributors"
-                )
-            sections.append("\\end{itemize}")
-
-        # Overall change statistics
-        total_changes = sum(
-            m.change_probability.change_frequency 
-            for m in stats.values() 
-            if m.change_probability
-        )
-        total_contributors = len(set().union(*[
-            m.change_probability.contributors 
-            for m in stats.values() 
-            if m.change_probability
-            if m.change_probability.contributors
-        ]))
-
-        sections.extend([
-            f"\\item Total Changes: {total_changes}",
-            f"\\item Unique Contributors: {total_contributors}",
-            f"\\item Average Changes per File: {total_changes/len(stats):.1f}" if stats else ""
-        ])
-        sections.append("\\end{itemize}")
-
         return '\n'.join(sections)
+    
+    def _prepare_ml_data(self, stats: Dict) -> Dict[str, Any]:
+        """Prepare ML-related data for the report."""
+        # Get deployment analysis
+        team_availability = self._get_team_availability()
+        analysis = self.ml_system.analyze_deployment(stats, team_availability)
+        
+        if 'error' in analysis:
+            return self._prepare_ml_error_data(analysis)
+        
+        return {
+            'DEPLOYMENT_CONFIDENCE': f"{analysis['overall_confidence']*100:.1f}\\%",
+            'DEPLOYMENT_WINDOWS_TABLE': self._format_deployment_windows(
+                analysis['optimal_windows']
+            ),
+            'RESOURCE_REQUIREMENTS': self._format_resource_requirements(
+                analysis['resource_prediction']
+            ),
+            'ROLLBACK_RISK_TABLE': self._format_rollback_risks(
+                analysis['rollback_prediction']
+            ),
+            'ROLLBACK_MITIGATION': self._format_mitigation_suggestions(
+                analysis['rollback_prediction'].mitigation_suggestions
+            ),
+            'INCIDENT_PROBABILITY': f"{analysis['incident_prediction'].probability*100:.1f}\\%",
+            'INCIDENT_SEVERITY': analysis['incident_prediction'].severity_level.title(),
+            'INCIDENT_RESOLUTION_TIME': f"{analysis['incident_prediction'].estimated_resolution_time:.1f}",
+            'INCIDENT_AREAS': self._format_incident_areas(
+                analysis['incident_prediction'].potential_areas
+            )
+        }
 
+    def _prepare_ml_error_data(self, analysis: Dict) -> Dict[str, Any]:
+        """Prepare error message for ML section."""
+        return {
+            'DEPLOYMENT_CONFIDENCE': "N/A",
+            'DEPLOYMENT_WINDOWS_TABLE': "Insufficient data & N/A & N/A & N/A",
+            'RESOURCE_REQUIREMENTS': "\\item Insufficient historical data for accurate prediction",
+            'ROLLBACK_RISK_TABLE': "N/A & N/A",
+            'ROLLBACK_MITIGATION': "\\item Not available due to insufficient data",
+            'INCIDENT_PROBABILITY': "N/A",
+            'INCIDENT_SEVERITY': "Unknown",
+            'INCIDENT_RESOLUTION_TIME': "N/A",
+            'INCIDENT_AREAS': "\\item Unable to determine potential incident areas"
+        }
+
+    def _format_deployment_windows(self, windows: List[DeploymentWindow]) -> str:
+        """Format deployment windows for LaTeX table."""
+        rows = []
+        for window in windows:
+            start_time = window.start_time.strftime('%H:%M')
+            end_time = window.end_time.strftime('%H:%M')
+            rows.append(
+                f"{start_time}-{end_time} & "
+                f"{window.historical_success_rate*100:.1f}\\% & "
+                f"{window.team_availability*100:.1f}\\% & "
+                f"{window.risk_score*100:.1f}\\%"
+            )
+        return '\\\\\n        '.join(rows)
+
+    def _format_resource_requirements(self, resource_pred: ResourceAllocation) -> str:
+        """Format resource requirements for LaTeX."""
+        items = [
+            f"\\item Required Team Size: {resource_pred.recommended_team_size} developers",
+            f"\\item Estimated Support Duration: {resource_pred.estimated_support_duration:.1f} hours",
+            "\\item Required Skills:",
+            "\\begin{itemize}"
+        ]
+        
+        for skill in sorted(resource_pred.required_skills):
+            items.append(f"  \\item {skill.replace('_', ' ').title()}")
+        
+        items.append("\\end{itemize}")
+        items.append(f"\\item Prediction Confidence: {resource_pred.confidence_score*100:.1f}\\%")
+        
+        return '\n'.join(items)
+
+    def _format_rollback_risks(self, rollback_pred: RollbackPrediction) -> str:
+        """Format rollback risks for LaTeX table."""
+        rows = []
+        for factor, score in rollback_pred.risk_factors.items():
+            rows.append(
+                f"{factor.replace('_', ' ').title()} & "
+                f"{score*100:.1f}\\%"
+            )
+        return '\\\\\n        '.join(rows)
+
+    def _format_mitigation_suggestions(self, suggestions: List[str]) -> str:
+        """Format mitigation suggestions for LaTeX."""
+        if not suggestions:
+            return "\\item No specific mitigation steps required"
+        return '\n'.join(f"\\item {suggestion}" for suggestion in suggestions)
+
+    def _format_incident_areas(self, areas: List[str]) -> str:
+        """Format incident areas for LaTeX."""
+        if not areas:
+            return "\\item No specific areas of concern identified"
+        return '\n'.join(f"\\item {area}" for area in areas)
+
+    def _get_team_availability(self) -> Dict[str, List[time]]:
+        """Get team availability data."""
+        # This is a placeholder - implement based on your actual data source
+        return {
+            'team_member_1': [(time(9, 0), time(17, 0))],
+            'team_member_2': [(time(10, 0), time(18, 0))],
+            'team_member_3': [(time(8, 0), time(16, 0))]
+        }
+    
     def _escape_latex(self, text: str) -> str:
         """Escape special LaTeX characters in text."""
         if not isinstance(text, str):
@@ -555,3 +602,75 @@ class PDFReportGenerator:
             print("Linux: sudo apt-get install texlive-full")
             print("macOS: brew install basictex")
             raise
+
+    def _format_ml_explanations(self, ml_analysis: Dict[str, Any]) -> Dict[str, str]:
+        """Format ML analysis explanations for LaTeX."""
+        # Format feature importance table
+        importance_rows = []
+        for feature, impact in ml_analysis['feature_importances']['cross_model'].items():
+            # Find maximum deviation across models for this feature
+            max_deviation = max(
+                abs(contributor['deviation'])
+                for pred in ['rollback_prediction', 'resource_prediction', 'incident_prediction']
+                if pred in ml_analysis
+                for contributor in ml_analysis[pred].top_contributors
+                if contributor['feature'] == feature
+            )
+            importance_rows.append(
+                f"{feature.replace('_', ' ').title()} & "
+                f"{impact*100:.1f}\\% & "
+                f"{max_deviation:.1f}\\sigma"
+            )
+        feature_importance_table = '\\\\\n        '.join(importance_rows[:5])  # Top 5 features
+
+        # Format individual model explanations
+        window_explanation = ml_analysis['optimal_windows'][0].explanation.replace('\n', '\\\\\n')
+        rollback_explanation = ml_analysis['rollback_prediction'].explanation.replace('\n', '\\\\\n')
+        resource_explanation = ml_analysis['resource_prediction'].explanation.replace('\n', '\\\\\n')
+        incident_explanation = ml_analysis['incident_prediction'].explanation.replace('\n', '\\\\\n')
+
+        # Format feature interactions
+        interactions = []
+        for model_name, pred in [
+            ('Deployment Window', ml_analysis['optimal_windows'][0]),
+            ('Rollback', ml_analysis['rollback_prediction']),
+            ('Resource', ml_analysis['resource_prediction']),
+            ('Incident', ml_analysis['incident_prediction'])
+        ]:
+            if hasattr(pred, 'feature_interactions'):
+                for interaction in pred.feature_interactions[:2]:  # Top 2 per model
+                    interactions.append(
+                        f"\\item {model_name}: "
+                        f"{interaction['features'][0].replace('_', ' ').title()} and "
+                        f"{interaction['features'][1].replace('_', ' ').title()} "
+                        f"(strength: {interaction['strength']:.2f})"
+                    )
+
+        # Format confidence analysis
+        confidence_rows = []
+        confidence_factors = []
+        for aspect, score in ml_analysis['confidence_breakdown'].items():
+            confidence_rows.append(
+                f"{aspect.replace('_', ' ').title()} & {score*100:.1f}\\%"
+            )
+            
+            # Add relevant confidence factors
+            if aspect in ml_analysis and hasattr(ml_analysis[aspect], 'confidence_factors'):
+                factors = ml_analysis[aspect].confidence_factors['confidence_factors']
+                for factor, present in factors.items():
+                    if present:
+                        confidence_factors.append(
+                            f"\\item {factor.replace('_', ' ').title()} "
+                            f"in {aspect.replace('_', ' ').title()}"
+                        )
+
+        return {
+            'FEATURE_IMPORTANCE_TABLE': feature_importance_table,
+            'WINDOW_EXPLANATION': window_explanation,
+            'ROLLBACK_EXPLANATION': rollback_explanation,
+            'RESOURCE_EXPLANATION': resource_explanation,
+            'INCIDENT_EXPLANATION': incident_explanation,
+            'FEATURE_INTERACTIONS': '\n'.join(interactions),
+            'CONFIDENCE_TABLE': '\\\\\n        '.join(confidence_rows),
+            'CONFIDENCE_FACTORS': '\n'.join(confidence_factors)
+        }
