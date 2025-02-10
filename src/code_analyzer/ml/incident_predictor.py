@@ -27,8 +27,11 @@ class IncidentPredictor(BasePredictor):
         ]
 
     def _extract_features(self, metrics: Dict[str, Any], window: DeploymentWindow = None) -> np.ndarray:
-        """Extract features for incident prediction."""
-        if not metrics or 'files' not in metrics or not metrics['files']:
+        """Extract features with robust error handling."""
+        if not metrics or not isinstance(metrics.get('files'), dict):
+            return np.zeros(len(self.feature_names))
+
+        if not metrics['files'] or all(not v for v in metrics['files'].values()):
             return np.zeros(len(self.feature_names))
 
         complexity_features = []
@@ -37,34 +40,34 @@ class IncidentPredictor(BasePredictor):
         
         for file_path, file_metrics in metrics['files'].items():
             try:
-                # Complexity metrics
+                # Safely access nested dictionaries
                 complexity = file_metrics.get('complexity', {})
-                complexity_features.append([
-                    complexity.get('cyclomatic_complexity', 0),
-                    complexity.get('cognitive_complexity', 0),
-                    complexity.get('change_risk', 0)
-                ])
+                if isinstance(complexity, dict):
+                    complexity_features.append([
+                        float(complexity.get('cyclomatic_complexity', 0)),
+                        float(complexity.get('cognitive_complexity', 0)),
+                        float(complexity.get('change_risk', 0))
+                    ])
                 
-                # Security issues
                 security = file_metrics.get('security', {})
-                security_count += (
-                    security.get('potential_sql_injections', 0) +
-                    security.get('hardcoded_secrets', 0) +
-                    len(security.get('vulnerable_imports', []))
-                )
+                if isinstance(security, dict):
+                    security_count += (
+                        security.get('potential_sql_injections', 0) +
+                        security.get('hardcoded_secrets', 0) +
+                        len(security.get('vulnerable_imports', []))
+                    )
                 
-                # Architecture issues
                 architecture = file_metrics.get('architecture', {})
-                dependencies_count += len(architecture.get('circular_dependencies', []))
-            except (TypeError, AttributeError):
+                if isinstance(architecture, dict):
+                    dependencies_count += len(architecture.get('circular_dependencies', []))
+            except (TypeError, AttributeError, ValueError):
                 continue
 
         if not complexity_features:
             return np.zeros(len(self.feature_names))
 
-        complexity_features = np.array(complexity_features)
-        
         try:
+            complexity_features = np.array(complexity_features)
             features = [
                 np.mean(complexity_features[:, 0]),  # cyclomatic mean
                 np.max(complexity_features[:, 0]),   # cyclomatic max
@@ -89,13 +92,13 @@ class IncidentPredictor(BasePredictor):
         metrics: Dict[str, Any],
         top_contributors: List[Dict[str, Any]]
     ) -> List[str]:
-        """Identify areas likely to cause incidents."""
+        """Identify areas likely to cause incidents with safe access."""
         risk_areas = []
         
         # Check top contributing factors
         for contributor in top_contributors:
-            feature = contributor['feature']
-            deviation = contributor['deviation']
+            feature = contributor.get('feature', '')
+            deviation = contributor.get('deviation', 0)
             
             if abs(deviation) > 1.5:  # Significant deviation
                 if 'complexity' in feature:
@@ -109,16 +112,24 @@ class IncidentPredictor(BasePredictor):
                 elif 'test' in feature:
                     risk_areas.append("Insufficient testing")
         
-        # Check specific metrics
-        for file_path, metrics in metrics['files'].items():
-            if metrics['complexity']['cyclomatic_complexity'] > 15:
-                risk_areas.append(f"High complexity in {file_path}")
-            if metrics['security']['potential_sql_injections'] > 0:
-                risk_areas.append(f"SQL injection risks in {file_path}")
-            if metrics['architecture']['component_coupling'] > 0.8:
-                risk_areas.append(f"High coupling in {file_path}")
-            if len(metrics['architecture']['circular_dependencies']) > 0:
-                risk_areas.append(f"Circular dependencies in {file_path}")
+        # Check specific metrics safely
+        for file_path, file_metrics in metrics.get('files', {}).items():
+            try:
+                complexity = file_metrics.get('complexity', {})
+                if complexity.get('cyclomatic_complexity', 0) > 15:
+                    risk_areas.append(f"High complexity in {file_path}")
+                
+                security = file_metrics.get('security', {})
+                if security.get('potential_sql_injections', 0) > 0:
+                    risk_areas.append(f"SQL injection risks in {file_path}")
+                
+                architecture = file_metrics.get('architecture', {})
+                if architecture.get('component_coupling', 0) > 0.8:
+                    risk_areas.append(f"High coupling in {file_path}")
+                if architecture.get('circular_dependencies', []):
+                    risk_areas.append(f"Circular dependencies in {file_path}")
+            except (AttributeError, TypeError):
+                continue
         
         return list(set(risk_areas))  # Remove duplicates
 
@@ -133,11 +144,12 @@ class IncidentPredictor(BasePredictor):
         
         # Consider feature importance for severity
         high_risk_features = sum(
-            1 for contrib in explanation['top_contributors']
-            if abs(contrib['impact']) > 0.2
+            1 for contrib in explanation.get('top_contributors', [])
+            if abs(contrib.get('impact', 0)) > 0.2
         )
         
-        if probability > 0.7 or high_risk_features >= 3:
+        # High severity if probability >= 0.7 or 3+ high impact features
+        if probability >= 0.7 or high_risk_features >= 3:
             return "high"
         return "medium"
 
@@ -158,10 +170,10 @@ class IncidentPredictor(BasePredictor):
         # Fallback estimation based on metrics
         base_time = 1.0
         complexity_factor = sum(
-            m['complexity']['cyclomatic_complexity'] / 15
-            for m in metrics['files'].values()
+            m.get('complexity', {}).get('cyclomatic_complexity', 0) / 15
+            for m in metrics.get('files', {}).values()
         )
-        security_factor = metrics['summary']['security_issues'] * 0.5
+        security_factor = metrics.get('summary', {}).get('security_issues', 0) * 0.5
         
         return base_time + complexity_factor + security_factor
 
@@ -205,19 +217,20 @@ class IncidentPredictor(BasePredictor):
         severity = self._predict_incident_severity(probability, explanation)
         resolution_time = self._estimate_resolution_time(metrics, similar_deployments)
         
-        # Calculate confidence score
-        confidence_score = self._calculate_confidence_score(
-            explanation['confidence_factors']
-        )
-
         # Calculate confidence
-        confidence_factors = explanation['confidence_factors']
-        base_confidence = 0.8  # Start with reasonable base confidence
-        if confidence_factors['extreme_values'] > 2:
-            base_confidence *= 0.9
-        if confidence_factors['importance_concentration'] > 0.5:
-            base_confidence *= 0.9
-        confidence_score = max(0.0, min(1.0, base_confidence - confidence_factors['confidence_penalty']))
+        num_relevant_samples = len(similar_deployments)
+        confidence_score = self._calculate_confidence_score(num_relevant_samples)
+        
+        # Apply confidence penalties from explanation
+        confidence_factors = explanation.get('confidence_factors', {})
+        if confidence_factors:
+            base_confidence = confidence_score
+            if confidence_factors.get('extreme_values', 0) > 2:
+                base_confidence *= 0.9
+            if confidence_factors.get('importance_concentration', 0) > 0.5:
+                base_confidence *= 0.9
+            confidence_score = max(0.0, min(1.0, 
+                base_confidence - confidence_factors.get('confidence_penalty', 0)))
 
         return IncidentPrediction(
             probability=probability,
@@ -232,46 +245,88 @@ class IncidentPredictor(BasePredictor):
         )
 
     def _calculate_coupling(self, metrics: Dict[str, Any]) -> float:
-        """Calculate average component coupling."""
-        couplings = [
-            m['architecture']['component_coupling']
-            for m in metrics['files'].values()
-        ]
-        return np.mean(couplings) if couplings else 0.0
+        """Calculate average component coupling with safe fallback."""
+        try:
+            couplings = []
+            for file_metrics in metrics.get('files', {}).values():
+                arch_metrics = file_metrics.get('architecture', {})
+                if isinstance(arch_metrics, dict):
+                    coupling = arch_metrics.get('component_coupling', 0.0)
+                    if isinstance(coupling, (int, float)):
+                        couplings.append(coupling)
+            return np.mean(couplings) if couplings else 0.0
+        except (AttributeError, TypeError):
+            return 0.0
 
     def _calculate_layering_violations(self, metrics: Dict[str, Any]) -> int:
         """Calculate total layering violations."""
-        return sum(
-            m['architecture']['layering_violations']
-            for m in metrics['files'].values()
-        )
+        try:
+            return sum(
+                file_metrics.get('architecture', {}).get('layering_violations', 0)
+                for file_metrics in metrics.get('files', {}).values()
+            )
+        except (AttributeError, TypeError):
+            return 0
 
     def _calculate_test_coverage(self, metrics: Dict[str, Any]) -> float:
         """Calculate test coverage metric."""
-        total_files = len(metrics['files'])
-        files_with_tests = sum(
-            1 for m in metrics['files'].values()
-            if m['metrics'].test_coverage_files
-        )
-        return files_with_tests / total_files if total_files > 0 else 0.0
+        try:
+            total_files = len(metrics.get('files', {}))
+            if total_files == 0:
+                return 0.0
+            
+            files_with_tests = sum(
+                1 for file_metrics in metrics['files'].values()
+                if hasattr(file_metrics.get('metrics'), 'test_coverage_files') and 
+                file_metrics['metrics'].test_coverage_files
+            )
+            return files_with_tests / total_files
+        except (AttributeError, TypeError, ZeroDivisionError):
+            return 0.0
 
     def _calculate_documentation_ratio(self, metrics: Dict[str, Any]) -> float:
         """Calculate documentation ratio."""
-        total_code = sum(m['metrics'].lines_code for m in metrics['files'].values())
-        total_comments = sum(m['metrics'].lines_comment for m in metrics['files'].values())
-        return total_comments / total_code if total_code > 0 else 0.0
+        try:
+            total_code = sum(
+                file_metrics.get('metrics', {}).lines_code
+                for file_metrics in metrics.get('files', {}).values()
+            )
+            if total_code == 0:
+                return 0.0
+            
+            total_comments = sum(
+                file_metrics.get('metrics', {}).lines_comment
+                for file_metrics in metrics.get('files', {}).values()
+            )
+            return total_comments / total_code
+        except (AttributeError, TypeError, ZeroDivisionError):
+            return 0.0
 
     def _calculate_churn_rate(self, metrics: Dict[str, Any]) -> float:
         """Calculate code churn rate."""
-        churn_rates = []
-        for file_metrics in metrics['files'].values():
-            if file_metrics['metrics'].change_probability:
-                churn_rates.append(file_metrics['metrics'].change_probability.churn_rate)
-        return np.mean(churn_rates) if churn_rates else 0.0
+        try:
+            churn_rates = []
+            for file_metrics in metrics.get('files', {}).values():
+                metrics_obj = file_metrics.get('metrics')
+                if metrics_obj and metrics_obj.change_probability:
+                    churn_rates.append(metrics_obj.change_probability.churn_rate)
+            return np.mean(churn_rates) if churn_rates else 0.0
+        except (AttributeError, TypeError):
+            return 0.0
 
     def _update_models_if_needed(self) -> None:
         """Update prediction model with new data."""
         if len(self.deployment_history) % 10 == 0:
-            X = np.array([self._extract_features(d.metrics) for d in self.deployment_history])
-            y = np.array([bool(len(d.issues_encountered)) for d in self.deployment_history])
-            self.model.fit(X, y)
+            try:
+                X = np.array([
+                    self._extract_features(d.metrics)
+                    for d in self.deployment_history
+                ])
+                y = np.array([
+                    bool(len(d.issues_encountered))
+                    for d in self.deployment_history
+                ])
+                self.model.fit(X, y)
+            except (AttributeError, TypeError, ValueError) as e:
+                # Log error but don't crash
+                print(f"Error updating models: {str(e)}")

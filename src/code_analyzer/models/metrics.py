@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Set, Dict, List, Optional
+from typing import Set, Dict, List, Optional, Any
 from datetime import datetime, time
 
 @dataclass
@@ -59,11 +59,36 @@ class CodeMetrics:
     
 @dataclass
 class DeploymentWindow:
+    """Represents a deployment time window with associated metrics and explanations."""
+    
+    # Time window
     start_time: time
     end_time: time
+    
+    # Risk metrics
     risk_score: float
     team_availability: float
     historical_success_rate: float
+    
+    # Deployment constraints
+    required_team_size: int = 2
+    required_skills: List[str] = None
+    estimated_duration: float = 2.0  # hours
+    
+    # Environment factors
+    system_load: Dict[str, float] = None  # Service load metrics
+    concurrent_deployments: List[str] = None  # Other planned deployments
+    
+    # Explainability
+    explanation: str = ""
+    feature_importance: Dict[str, float] = None
+    top_contributors: List[Dict[str, Any]] = None
+    feature_interactions: List[Dict[str, Any]] = None
+    
+    # Quality metrics
+    confidence_score: float = 1.0
+    data_completeness: float = 1.0
+    prediction_quality: Dict[str, bool] = None
 
 @dataclass
 class ResourceAllocation:
@@ -71,13 +96,41 @@ class ResourceAllocation:
     required_skills: Set[str]
     estimated_support_duration: float
     confidence_score: float
+    explanation: str
+    feature_importance: Dict[str, float]
+    top_contributors: List[Dict[str, Any]]
+    feature_interactions: List[Dict[str, Any]]
 
 @dataclass
 class RollbackPrediction:
-    probability: float
-    risk_factors: Dict[str, float]
-    mitigation_suggestions: List[str]
-    confidence_score: float
+    """Prediction results for deployment rollback likelihood with detailed explanations."""
+    
+    # Core prediction
+    probability: float  # Probability of rollback occurring
+    
+    # Risk analysis
+    risk_factors: Dict[str, float]  # Contribution of each risk category
+    severity_level: str  # 'low', 'medium', or 'high' based on probability and impact
+    critical_files: List[str]  # Files with highest risk factors
+    
+    # Mitigation planning
+    mitigation_suggestions: List[str]  # Concrete suggestions to reduce risk
+    recommended_reviewers: List[str]  # Team members with relevant expertise
+    
+    # Model confidence
+    confidence_score: float  # Overall confidence in prediction
+    prediction_quality: Dict[str, bool]  # Quality factors affecting prediction
+    data_completeness: float  # Score indicating input data completeness
+    
+    # Explainability
+    explanation: str  # Natural language explanation of prediction
+    feature_importance: Dict[str, float]  # Impact of each feature
+    top_contributors: List[Dict[str, Any]]  # Most influential factors
+    feature_interactions: List[Dict[str, Any]]  # Important feature relationships
+    
+    # Historical context
+    similar_cases: List[str]  # IDs of similar historical deployments
+    historical_pattern: Dict[str, float]  # Relevant historical metrics
 
 @dataclass
 class IncidentPrediction:
@@ -86,6 +139,10 @@ class IncidentPrediction:
     severity_level: str
     estimated_resolution_time: float
     confidence_score: float
+    explanation: str
+    feature_importance: Dict[str, float]
+    top_contributors: List[Dict[str, Any]]
+    feature_interactions: List[Dict[str, Any]]
 
 @dataclass
 class DeploymentFeedback:
@@ -100,3 +157,59 @@ class DeploymentFeedback:
     start_time: datetime
     end_time: datetime
     affected_services: List[str]
+
+@dataclass
+class DeploymentAnalysis:
+    """Comprehensive deployment analysis results with detailed explanations."""
+    
+    # Deployment windows
+    optimal_windows: List['DeploymentWindow']
+    
+    # Predictions
+    rollback_prediction: 'RollbackPrediction'
+    resource_prediction: 'ResourceAllocation'
+    incident_prediction: 'IncidentPrediction'
+    
+    # Confidence metrics
+    overall_confidence: float
+    confidence_breakdown: Dict[str, float]
+    
+    # Explainability
+    feature_importances: Dict[str, Dict[str, float]]
+    system_explanation: str
+    key_insights: List[Dict[str, Any]]
+    
+    # Analysis metadata
+    timestamp: float = None
+    analysis_version: str = "1.0"
+    model_versions: Dict[str, str] = field(default_factory=dict)
+    
+    # Analysis quality
+    data_completeness: float = 1.0
+    prediction_quality: Dict[str, bool] = field(default_factory=dict)
+    error_message: str = None
+
+@dataclass
+class MLSystemMetrics:
+    """System-wide ML performance metrics."""
+    
+    # Model performance
+    predictor_accuracies: Dict[str, float]
+    confidence_scores: Dict[str, float]
+    data_quality_scores: Dict[str, float]
+    
+    # Historical performance
+    historical_success_rate: float
+    prediction_stability: float
+    calibration_score: float
+    
+    # Data metrics
+    training_samples: Dict[str, int]
+    feature_coverage: Dict[str, float]
+    recent_accuracy: Dict[str, List[float]]
+    
+    # System health
+    last_update_timestamp: float
+    model_health_checks: Dict[str, bool]
+    data_drift_detected: bool = False
+    requires_retraining: bool = False
