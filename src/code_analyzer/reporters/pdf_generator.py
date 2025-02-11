@@ -848,11 +848,20 @@ class CodeMetricsPDFGenerator:
         """Generate the complexity analysis section of the report."""
         self._add_title("4. Complexity Analysis", "SectionTitle")
         
-        # Overview
-        avg_cyclomatic = sum(m.complexity.cyclomatic_complexity for m in code_metrics.values()) / len(code_metrics)
-        avg_cognitive = sum(m.complexity.cognitive_complexity for m in code_metrics.values()) / len(code_metrics)
-        avg_maintainability = sum(m.complexity.maintainability_index for m in code_metrics.values()) / len(code_metrics)
+        # Calculate metrics
+        total_files = len(code_metrics)
+        if total_files == 0:
+            self._add_paragraph("No files available for complexity analysis.")
+            return
+            
+        # Calculate averages
+        avg_cyclomatic = sum(m.complexity.cyclomatic_complexity for m in code_metrics.values()) / total_files
+        avg_cognitive = sum(m.complexity.cognitive_complexity for m in code_metrics.values()) / total_files
+        avg_maintainability = sum(m.complexity.maintainability_index for m in code_metrics.values()) / total_files
+        max_nesting = max(m.complexity.max_nesting_depth for m in code_metrics.values())
+        avg_change_risk = sum(m.complexity.change_risk for m in code_metrics.values()) / total_files
         
+        # Overview text
         overview = f"""
         Complexity analysis examined various aspects of code complexity across the codebase. 
         The average cyclomatic complexity is {avg_cyclomatic:.2f}, with an average cognitive complexity 
@@ -860,28 +869,27 @@ class CodeMetricsPDFGenerator:
         """
         self._add_paragraph(overview)
         
-        # Complexity Metrics Overview
-        self._add_title("Complexity Metrics Overview", "SubsectionTitle")
-        
-        max_nesting = max(m.complexity.max_nesting_depth for m in code_metrics.values())
-        avg_change_risk = sum(m.complexity.change_risk for m in code_metrics.values()) / len(code_metrics)
-        
+        # Core metrics table
         metrics_data = [
             ['Metric', 'Value', 'Status'],
-            ['Cyclomatic Complexity', f"{avg_cyclomatic:.2f}", 'HIGH' if avg_cyclomatic > 15 else 'MEDIUM' if avg_cyclomatic > 10 else 'LOW'],
-            ['Cognitive Complexity', f"{avg_cognitive:.2f}", 'HIGH' if avg_cognitive > 20 else 'MEDIUM' if avg_cognitive > 15 else 'LOW'],
-            ['Max Nesting Depth', str(max_nesting), 'HIGH' if max_nesting > 5 else 'MEDIUM' if max_nesting > 3 else 'LOW'],
-            ['Maintainability Index', f"{avg_maintainability:.2f}", 'LOW' if avg_maintainability < 50 else 'MEDIUM' if avg_maintainability < 75 else 'HIGH'],
-            ['Change Risk', f"{avg_change_risk:.2f}%", 'HIGH' if avg_change_risk > 75 else 'MEDIUM' if avg_change_risk > 50 else 'LOW']
+            ['Cyclomatic Complexity', f"{avg_cyclomatic:.2f}", 
+            'HIGH' if avg_cyclomatic > 15 else 'MEDIUM' if avg_cyclomatic > 10 else 'LOW'],
+            ['Cognitive Complexity', f"{avg_cognitive:.2f}", 
+            'HIGH' if avg_cognitive > 20 else 'MEDIUM' if avg_cognitive > 15 else 'LOW'],
+            ['Max Nesting Depth', str(max_nesting),
+            'HIGH' if max_nesting > 5 else 'MEDIUM' if max_nesting > 3 else 'LOW'],
+            ['Maintainability Index', f"{avg_maintainability:.2f}",
+            'LOW' if avg_maintainability < 50 else 'MEDIUM' if avg_maintainability < 75 else 'HIGH'],
+            ['Change Risk', f"{avg_change_risk:.2f}%",
+            'HIGH' if avg_change_risk > 75 else 'MEDIUM' if avg_change_risk > 50 else 'LOW']
         ]
         
-        # Apply status colors
+        # Apply colors
         status_colors = {
             'HIGH': self.colors['danger'],
             'MEDIUM': self.colors['warning'],
             'LOW': self.colors['success']
         }
-        
         table_style = self.table_style
         for i, row in enumerate(metrics_data[1:], 1):
             status = row[2]
@@ -893,7 +901,6 @@ class CodeMetricsPDFGenerator:
         # Complexity Distribution
         self._add_title("Complexity Distribution", "SubsectionTitle")
         
-        # Create complexity distribution chart
         drawing = Drawing(400, 200)
         chart = VerticalBarChart()
         chart.x = 50
@@ -926,7 +933,6 @@ class CodeMetricsPDFGenerator:
         chart.categoryAxis.labels.angle = 30
         chart.valueAxis.valueMin = 0
         
-        # Color coding for complexity
         chart.bars[0].fillColor = self.colors['primary']
         
         drawing.add(chart)
@@ -990,15 +996,18 @@ class CodeMetricsPDFGenerator:
                 avg_halstead[key] += metrics.complexity.halstead_metrics.get(key, 0)
         
         for key in avg_halstead:
-            avg_halstead[key] /= len(code_metrics)
+            avg_halstead[key] /= total_files
         
+        # Create Halstead metrics table with all required metrics
         halstead_data = [
-            ['Metric', 'Average Value', 'Status'],
-            ['Program Length', f"{avg_halstead['length']:.2f}", 'MEDIUM'],
-            ['Vocabulary Size', f"{avg_halstead['vocabulary']:.2f}", 'INFO'],
-            ['Program Volume', f"{avg_halstead['volume']:.2f}", 'MEDIUM'],
-            ['Difficulty Level', f"{avg_halstead['difficulty']:.2f}", 'HIGH' if avg_halstead['difficulty'] > 30 else 'MEDIUM'],
-            ['Programming Effort', f"{avg_halstead['effort']:.2f}", 'HIGH' if avg_halstead['effort'] > 1000000 else 'MEDIUM']
+            ['Halstead Metric', 'Average Value', 'Status'],
+            ['Vocabulary', f"{avg_halstead['vocabulary']:.2f}", 'MEDIUM'],
+            ['Length', f"{avg_halstead['length']:.2f}", 'MEDIUM'],
+            ['Volume', f"{avg_halstead['volume']:.2f}", 'MEDIUM'],
+            ['Difficulty', f"{avg_halstead['difficulty']:.2f}", 
+            'HIGH' if avg_halstead['difficulty'] > 30 else 'MEDIUM'],
+            ['Effort', f"{avg_halstead['effort']:.2f}", 
+            'HIGH' if avg_halstead['effort'] > 1000000 else 'MEDIUM']
         ]
         
         # Apply status colors
@@ -1051,36 +1060,48 @@ class CodeMetricsPDFGenerator:
         
         recommendations = []
         
-        if avg_cyclomatic > 10:
-            recommendations.append(
-                "• Consider breaking down complex methods to reduce cyclomatic complexity below 10"
-            )
-        if avg_cognitive > 15:
-            recommendations.append(
-                "• Simplify complex logic flows to reduce cognitive load on developers"
-            )
         if max_nesting > 3:
             recommendations.append(
-                "• Reduce nesting depth through early returns and guard clauses"
-            )
-        if avg_maintainability < 75:
-            recommendations.append(
-                "• Improve code maintainability through better documentation and simpler designs"
-            )
-        if avg_change_risk > 50:
-            recommendations.append(
-                "• Focus on high-risk files during code reviews and testing"
-            )
-        if avg_halstead['difficulty'] > 30:
-            recommendations.append(
-                "• Simplify complex algorithms and reduce code volume where possible"
+                f"• Deep nesting detected with maximum nesting depth of {max_nesting}. "
+                "Reduce nested code blocks through early returns and guard clauses. "
+                "Break deeply nested code into separate functions."
             )
         
+        if avg_cyclomatic > 10:
+            recommendations.append(
+                "• High cyclomatic complexity detected. Consider breaking down complex "
+                "methods into smaller, focused functions. Simplify conditional logic."
+            )
+        
+        if avg_cognitive > 15:
+            recommendations.append(
+                "• High cognitive complexity detected. Simplify complex logic flows and "
+                "improve code readability through better structure."
+            )
+        
+        if avg_maintainability < 75:
+            recommendations.append(
+                "• Low maintainability index detected. Improve code documentation and "
+                "comments. Reduce code size and complexity."
+            )
+        
+        if avg_halstead['difficulty'] > 30:
+            recommendations.append(
+                "• High Halstead difficulty detected. Simplify complex algorithms and "
+                "reduce code volume. Break down complex calculations."
+            )
+        
+        # Add recommendations to the report
         if recommendations:
-            for rec in recommendations:
-                self._add_paragraph(rec)
-        else:
-            self._add_paragraph("No specific complexity recommendations at this time.")
+            recommendation_text = "\n".join(recommendations)
+            self._add_paragraph(recommendation_text)
+            
+        # Add summary for zero complexity case
+        if avg_cyclomatic == 0 and avg_cognitive == 0 and max_nesting == 0:
+            self._add_paragraph(
+                "All files show low complexity metrics. While this is generally positive, "
+                "ensure this reflects actual code simplicity rather than incomplete analysis."
+            )
 
     def _generate_deployment_section(self, deployment_analysis):
         """Generate the deployment analysis section of the report."""
@@ -1289,22 +1310,39 @@ class CodeMetricsPDFGenerator:
         """Generate historical trends analysis section."""
         self._add_title("6. Historical Trends", "SectionTitle")
         
-        # Overview
-        self._add_paragraph(
-            "This section analyzes how code metrics have changed over time, identifying "
-            "trends and patterns in code quality, complexity, and maintenance."
-        )
+        # Get history data
+        history = []
+        for metrics in code_metrics.values():
+            if hasattr(metrics, 'history') and metrics.history:
+                history = metrics.history
+                break
         
-        # Get historical metrics
-        history = getattr(code_metrics, 'history', None)
         if not history:
             self._add_paragraph(
                 "No historical data available for trend analysis. Consider enabling metric "
                 "history tracking for future reports."
             )
             return
-            
-        # Complexity Trends
+        
+        # Overview of analysis period
+        first_date = history[0]['date']
+        last_date = history[-1]['date']
+        self._add_paragraph(
+            f"Analysis covers trends from {first_date} to {last_date}, "
+            f"examining complexity, code size, and quality metrics."
+        )
+        
+        # Early complexity trend analysis
+        if len(history) >= 2:
+            complexity_change = history[-1]['avg_complexity'] - history[0]['avg_complexity']
+            if complexity_change > 0:
+                self._add_paragraph(
+                    f"Code complexity has increased significantly by {complexity_change:.1f} points "
+                    "over the analysis period. Consider implementing refactoring initiatives to "
+                    "manage this increasing trend."
+                )
+        
+        # Complexity Evolution Chart
         self._add_title("Complexity Evolution", "SubsectionTitle")
         
         drawing = Drawing(400, 200)
@@ -1316,29 +1354,20 @@ class CodeMetricsPDFGenerator:
         
         # Extract trend data
         dates = [h['date'] for h in history]
-        avg_complexity = [h['avg_complexity'] for h in history]
-        avg_cognitive = [h['avg_cognitive_complexity'] for h in history]
+        complexity_values = [h['avg_complexity'] for h in history]
         
-        chart.data = [avg_complexity, avg_cognitive]
-        chart.lines[0].strokeColor = self.colors['primary']
-        chart.lines[1].strokeColor = self.colors['secondary']
-        
+        chart.data = [complexity_values]
         chart.categoryAxis.categoryNames = dates
-        chart.categoryAxis.labels.boxAnchor = 'ne'
-        chart.categoryAxis.labels.angle = 30
+        chart.lines[0].strokeColor = self.colors['primary']
         
-        # Add legend
         legend = Legend()
         legend.x = 380
         legend.y = 150
         legend.alignment = 'right'
-        legend.columnMaximum = 1
         legend.colorNamePairs = [
-            (self.colors['primary'], 'Cyclomatic Complexity'),
-            (self.colors['secondary'], 'Cognitive Complexity')
+            (self.colors['primary'], 'Code Complexity')
         ]
         drawing.add(legend)
-        
         drawing.add(chart)
         self.story.append(drawing)
         self.story.append(Spacer(1, 20))
@@ -1356,25 +1385,30 @@ class CodeMetricsPDFGenerator:
         total_lines = [h['total_lines'] for h in history]
         code_lines = [h['code_lines'] for h in history]
         
+        # Early size growth analysis
+        if len(history) >= 2:
+            size_change = ((history[-1]['total_lines'] - history[0]['total_lines']) 
+                        / history[0]['total_lines'] * 100)
+            if size_change > 50:
+                self._add_paragraph(
+                    f"Warning: Codebase shows rapid growth of {size_change:.1f}% during the analysis period. "
+                    "This rapid increase requires careful architectural management."
+                )
+        
         chart.data = [total_lines, code_lines]
+        chart.categoryAxis.categoryNames = dates
         chart.lines[0].strokeColor = self.colors['primary']
         chart.lines[1].strokeColor = self.colors['success']
-        
-        chart.categoryAxis.categoryNames = dates
-        chart.categoryAxis.labels.boxAnchor = 'ne'
-        chart.categoryAxis.labels.angle = 30
         
         legend = Legend()
         legend.x = 380
         legend.y = 150
         legend.alignment = 'right'
-        legend.columnMaximum = 1
         legend.colorNamePairs = [
             (self.colors['primary'], 'Total Lines'),
             (self.colors['success'], 'Code Lines')
         ]
         drawing.add(legend)
-        
         drawing.add(chart)
         self.story.append(drawing)
         self.story.append(Spacer(1, 20))
@@ -1393,24 +1427,19 @@ class CodeMetricsPDFGenerator:
         architecture_issues = [h['architecture_issues'] for h in history]
         
         chart.data = [security_issues, architecture_issues]
+        chart.categoryAxis.categoryNames = dates
         chart.lines[0].strokeColor = self.colors['danger']
         chart.lines[1].strokeColor = self.colors['warning']
-        
-        chart.categoryAxis.categoryNames = dates
-        chart.categoryAxis.labels.boxAnchor = 'ne'
-        chart.categoryAxis.labels.angle = 30
         
         legend = Legend()
         legend.x = 380
         legend.y = 150
         legend.alignment = 'right'
-        legend.columnMaximum = 1
         legend.colorNamePairs = [
             (self.colors['danger'], 'Security Issues'),
             (self.colors['warning'], 'Architecture Issues')
         ]
         drawing.add(legend)
-        
         drawing.add(chart)
         self.story.append(drawing)
         self.story.append(Spacer(1, 20))
@@ -1418,105 +1447,246 @@ class CodeMetricsPDFGenerator:
         # Trend Analysis
         self._add_title("Trend Analysis", "SubsectionTitle")
         
-        # Calculate trend indicators
-        latest_idx = -1
-        month_ago_idx = -4 if len(history) >= 4 else 0
-        
-        metrics_trends = {
-            'Complexity': (
-                avg_complexity[latest_idx] - avg_complexity[month_ago_idx],
-                avg_complexity[latest_idx]
-            ),
-            'Code Size': (
-                (total_lines[latest_idx] - total_lines[month_ago_idx]) / total_lines[month_ago_idx] * 100,
-                total_lines[latest_idx]
-            ),
-            'Security Issues': (
-                security_issues[latest_idx] - security_issues[month_ago_idx],
-                security_issues[latest_idx]
-            ),
-            'Architecture Issues': (
-                architecture_issues[latest_idx] - architecture_issues[month_ago_idx],
-                architecture_issues[latest_idx]
-            )
-        }
-        
-        trends_data = [['Metric', 'Current Value', 'Change', 'Trend']]
-        
-        for metric, (change, current) in metrics_trends.items():
-            if metric in ['Complexity', 'Security Issues', 'Architecture Issues']:
-                trend = 'POSITIVE' if change <= 0 else 'NEGATIVE'
-            else:  # Code Size
-                trend = 'POSITIVE' if change > 0 else 'NEUTRAL'
+        if len(history) >= 2:
+            latest = history[-1]
+            earliest = history[0]
+            
+            metrics_changes = {
+                'Complexity': latest['avg_complexity'] - earliest['avg_complexity'],
+                'Security Issues': latest['security_issues'] - earliest['security_issues'],
+                'Architecture Issues': latest['architecture_issues'] - earliest['architecture_issues']
+            }
+            
+            # Calculate code size change as percentage
+            if earliest['total_lines'] > 0:
+                size_change = ((latest['total_lines'] - earliest['total_lines']) 
+                            / earliest['total_lines'] * 100)
+                metrics_changes['Code Size'] = size_change
+            
+            trends_data = [['Metric', 'Change', 'Trend']]
+            
+            for metric, change in metrics_changes.items():
+                if metric == 'Code Size':
+                    value = f"{change:+.1f}%"
+                    trend = 'POSITIVE' if change > 0 else 'NEUTRAL'
+                else:
+                    value = f"{change:+.1f}"
+                    trend = 'NEGATIVE' if change > 0 else 'POSITIVE' if change < 0 else 'NEUTRAL'
+                    
+                trends_data.append([metric, value, trend])
+            
+            # Apply trend colors
+            status_colors = {
+                'POSITIVE': self.colors['success'],
+                'NEGATIVE': self.colors['danger'],
+                'NEUTRAL': self.colors['info']
+            }
+            
+            table_style = self.table_style
+            for i, row in enumerate(trends_data[1:], 1):
+                trend = row[2]
+                color = status_colors.get(trend, self.colors['info'])
+                table_style.add('TEXTCOLOR', (2, i), (2, i), color)
+            
+            self._add_table(trends_data, colWidths=[2*inch, 1.5*inch, inch], style=table_style)
+            
+            # Add trend insights
+            if metrics_changes['Complexity'] > 0:
+                self._add_paragraph(
+                    f"Code complexity has increased by {metrics_changes['Complexity']:.1f} points. "
+                    "This upward trend indicates growing code complexity that should be addressed "
+                    "through refactoring and improved design practices."
+                )
                 
-            trends_data.append([
-                metric,
-                f"{current:.1f}",
-                f"{change:+.1f}" + ("%" if metric == 'Code Size' else ""),
-                trend
-            ])
+            if 'Code Size' in metrics_changes and metrics_changes['Code Size'] > 50:
+                self._add_paragraph(
+                    f"Codebase has grown significantly by {metrics_changes['Code Size']:.1f}%. "
+                    "This rapid growth rate requires careful architectural management to maintain "
+                    "code quality."
+                )
         
-        # Apply trend colors
-        trend_colors = {
-            'POSITIVE': self.colors['success'],
-            'NEGATIVE': self.colors['danger'],
-            'NEUTRAL': self.colors['info']
-        }
-        
-        table_style = self.alternating_table_style
-        for i, row in enumerate(trends_data[1:], 1):
-            trend = row[3]
-            color = trend_colors.get(trend, self.colors['info'])
-            table_style.add('TEXTCOLOR', (3, i), (3, i), color)
-        
-        self._add_table(trends_data, colWidths=[2*inch, 1.5*inch, inch, inch], style=table_style)
-        
-        # Trend Insights
-        self._add_title("Trend Insights", "SubsectionTitle")
-        
-        insights = []
-        
-        # Generate insights based on trends
-        if metrics_trends['Complexity'][0] > 0:
-            insights.append(
-                "• Code complexity is increasing - consider refactoring complex components"
-            )
-        else:
-            insights.append(
-                "• Code complexity is stable or decreasing - good maintenance practices"
-            )
+        # Multiple Period Analysis
+        if len(history) >= 3:
+            self._add_title("Long-term Trends", "SubsectionTitle")
             
-        if metrics_trends['Code Size'][0] > 10:
-            insights.append(
-                "• Codebase is growing rapidly - ensure documentation and testing keep pace"
-            )
+            # Calculate period-over-period changes
+            complexity_changes = [
+                h2['avg_complexity'] - h1['avg_complexity']
+                for h1, h2 in zip(history[:-1], history[1:])
+            ]
             
-        if metrics_trends['Security Issues'][0] > 0:
-            insights.append(
-                "• Security issues are increasing - prioritize security fixes"
-            )
+            size_changes = [
+                ((h2['total_lines'] - h1['total_lines']) / h1['total_lines'] * 100) 
+                if h1['total_lines'] > 0 else 0
+                for h1, h2 in zip(history[:-1], history[1:])
+            ]
             
-        if metrics_trends['Architecture Issues'][0] > 0:
-            insights.append(
-                "• Architecture issues are increasing - review architectural decisions"
-            )
+            security_changes = [
+                h2['security_issues'] - h1['security_issues']
+                for h1, h2 in zip(history[:-1], history[1:])
+            ]
             
-        for insight in insights:
-            self._add_paragraph(insight)
+            # Calculate averages
+            avg_complexity_change = sum(complexity_changes) / len(complexity_changes)
+            avg_size_change = sum(size_changes) / len(size_changes)
+            avg_security_change = sum(security_changes) / len(security_changes)
+            
+            # Trend direction paragraphs
+            if avg_complexity_change > 0:
+                self._add_paragraph(
+                    f"Complexity shows a consistent increasing trend averaging "
+                    f"{avg_complexity_change:.2f} points per period. Consider implementing "
+                    "complexity reduction strategies."
+                )
+            elif avg_complexity_change < 0:
+                self._add_paragraph(
+                    f"Complexity shows a decreasing trend averaging "
+                    f"{abs(avg_complexity_change):.2f} points per period. Continue "
+                    "maintaining current code quality practices."
+                )
+                
+            if avg_security_change > 0:
+                self._add_paragraph(
+                    f"Security issues are increasing by an average of "
+                    f"{avg_security_change:.2f} issues per period. Security review "
+                    "and remediation should be prioritized."
+                )
+            
+            # Create long-term trends table
+            long_term_data = [
+                ['Metric', 'Average Change per Period', 'Trend'],
+                ['Complexity', f"{avg_complexity_change:+.2f}", 
+                'NEGATIVE' if avg_complexity_change > 0 else 'POSITIVE'],
+                ['Code Size', f"{avg_size_change:+.1f}%",
+                'POSITIVE' if avg_size_change > 0 else 'NEUTRAL'],
+                ['Security Issues', f"{avg_security_change:+.2f}",
+                'NEGATIVE' if avg_security_change > 0 else 'POSITIVE']
+            ]
+            
+            # Apply trend colors
+            table_style = self.table_style
+            for i, row in enumerate(long_term_data[1:], 1):
+                trend = row[2]
+                color = status_colors.get(trend, self.colors['info'])
+                table_style.add('TEXTCOLOR', (2, i), (2, i), color)
+            
+            self._add_table(long_term_data, colWidths=[2*inch, 2*inch, inch], style=table_style)
+            
+            # Trend Stability Analysis
+            self._add_title("Trend Stability Analysis", "SubsectionTitle")
+            
+            # Calculate stability metrics
+            complexity_volatility = max(abs(change) for change in complexity_changes)
+            size_volatility = max(abs(change) for change in size_changes)
+            security_volatility = max(abs(change) for change in security_changes)
+            
+            stability_thresholds = {
+                'LOW': {'complexity': 2.0, 'size': 20.0, 'security': 2.0},
+                'MEDIUM': {'complexity': 5.0, 'size': 50.0, 'security': 5.0}
+            }
+            
+            stability_data = [
+                ['Metric', 'Max Change', 'Stability'],
+                ['Complexity', f"{complexity_volatility:.2f}",
+                'HIGH' if complexity_volatility < stability_thresholds['LOW']['complexity']
+                else 'MEDIUM' if complexity_volatility < stability_thresholds['MEDIUM']['complexity']
+                else 'LOW'],
+                ['Code Size', f"{size_volatility:.1f}%",
+                'HIGH' if size_volatility < stability_thresholds['LOW']['size']
+                else 'MEDIUM' if size_volatility < stability_thresholds['MEDIUM']['size']
+                else 'LOW'],
+                ['Security', f"{security_volatility:.2f}",
+                'HIGH' if security_volatility < stability_thresholds['LOW']['security']
+                else 'MEDIUM' if security_volatility < stability_thresholds['MEDIUM']['security']
+                else 'LOW']
+            ]
+            
+            # Apply stability colors
+            status_colors = {
+                'HIGH': self.colors['success'],
+                'MEDIUM': self.colors['warning'],
+                'LOW': self.colors['danger']
+            }
+            
+            table_style = self.table_style
+            for i, row in enumerate(stability_data[1:], 1):
+                stability = row[2]
+                color = status_colors.get(stability, self.colors['info'])
+                table_style.add('TEXTCOLOR', (2, i), (2, i), color)
+            
+            self._add_table(stability_data, colWidths=[2*inch, 1.5*inch, inch], style=table_style)
+            
+            # Add stability insights
+            stability_insights = []
+            
+            # Check for any low stability metrics
+            for metric_row in stability_data[1:]:
+                metric, change, stability = metric_row
+                if stability == 'LOW':
+                    stability_insights.append(
+                        f"• High {metric.lower()} volatility detected (max change: {change}). "
+                        f"Consider implementing more gradual, controlled changes."
+                    )
+            
+            # Check for rapid oscillations
+            if any(c1 * c2 < 0 for c1, c2 in zip(complexity_changes[:-1], complexity_changes[1:])):
+                stability_insights.append(
+                    "• Complexity shows oscillating pattern between increases and decreases. "
+                    "This may indicate inconsistent development practices."
+                )
+            
+            if stability_insights:
+                self._add_paragraph("\nStability Concerns:")
+                for insight in stability_insights:
+                    self._add_paragraph(insight)
+            else:
+                self._add_paragraph(
+                    "\nAll metrics show good stability across periods. Continue current "
+                    "development practices that maintain consistent progress."
+                )
+                
+            # Summarize key actions
+            if any(row[2] == 'LOW' for row in stability_data[1:]) or avg_complexity_change > 0:
+                self._add_title("Recommended Actions", "SubsectionTitle")
+                actions = []
+                
+                if avg_complexity_change > 0:
+                    actions.append(
+                        "• Implement regular complexity reviews and refactoring sessions to "
+                        "address the increasing complexity trend"
+                    )
+                
+                if complexity_volatility >= stability_thresholds['MEDIUM']['complexity']:
+                    actions.append(
+                        "• Establish stronger code review practices to maintain more "
+                        "consistent complexity levels across changes"
+                    )
+                    
+                if size_volatility >= stability_thresholds['MEDIUM']['size']:
+                    actions.append(
+                        "• Plan and coordinate large code changes more carefully to avoid "
+                        "sudden significant fluctuations in codebase size"
+                    )
+                    
+                for action in actions:
+                    self._add_paragraph(action)
 
     def _generate_testing_section(self, code_metrics):
         """Generate testing and quality metrics section."""
         self._add_title("7. Testing & Quality Metrics", "SectionTitle")
         
-        # Overview
+        # Calculate coverage metrics
         total_files = len(code_metrics)
         files_with_tests = sum(1 for m in code_metrics.values() if m.test_coverage_files)
         test_coverage_ratio = files_with_tests / total_files if total_files > 0 else 0
         
+        # Overview text
+        coverage_status = "complete" if test_coverage_ratio == 1.0 else \
+                        "no" if test_coverage_ratio == 0.0 else "partial"
+        
         overview = f"""
-        Analysis of testing metrics across {total_files} files shows {files_with_tests} files 
-        ({test_coverage_ratio*100:.1f}%) have associated tests. This section provides detailed insights 
-        into test coverage, quality metrics, and testing patterns.
+        Analysis of testing metrics shows {coverage_status} test coverage, with {files_with_tests} 
+        out of {total_files} files ({test_coverage_ratio*100:.1f}%) having associated tests.
         """
         self._add_paragraph(overview)
         
@@ -1531,13 +1701,12 @@ class CodeMetricsPDFGenerator:
             'HIGH' if test_coverage_ratio > 0.8 else 'MEDIUM' if test_coverage_ratio > 0.6 else 'LOW']
         ]
         
-        # Apply status colors
+        # Add coverage table with status colors
         status_colors = {
             'HIGH': self.colors['success'],
             'MEDIUM': self.colors['warning'],
             'LOW': self.colors['danger']
         }
-        
         table_style = self.table_style
         for i, row in enumerate(coverage_data[1:], 1):
             status = row[2]
@@ -1546,7 +1715,7 @@ class CodeMetricsPDFGenerator:
         
         self._add_table(coverage_data, colWidths=[2*inch, 1.5*inch, 1.5*inch], style=table_style)
         
-        # Test Coverage Distribution
+        # Coverage Distribution Chart
         self._add_title("Coverage Distribution", "SubsectionTitle")
         
         drawing = Drawing(400, 200)
@@ -1567,9 +1736,53 @@ class CodeMetricsPDFGenerator:
         pie.slices[0].fillColor = self.colors['danger']
         pie.slices[1].fillColor = self.colors['success']
         
+        legend = Legend()
+        legend.x = 380
+        legend.y = 150
+        legend.alignment = 'right'
+        legend.colorNamePairs = [
+            (self.colors['danger'], 'No Tests'),
+            (self.colors['success'], 'With Tests')
+        ]
+        
         drawing.add(pie)
+        drawing.add(legend)
         self.story.append(drawing)
         self.story.append(Spacer(1, 20))
+        
+        # Zero Coverage Case
+        if test_coverage_ratio == 0:
+            self._add_title("No Test Coverage", "SubsectionTitle")
+            self._add_paragraph(
+                "Warning: No test coverage detected in any files. Implementation of automated "
+                "tests is strongly recommended to ensure code quality and prevent regressions."
+            )
+            recommendations = [
+                "• Start with critical business logic and high-risk components",
+                "• Aim for minimum 80% coverage of all files",
+                "• Consider implementing both unit and integration tests",
+                "• Focus on testing error conditions and edge cases",
+                "• Add tests before making changes to existing code"
+            ]
+            for rec in recommendations:
+                self._add_paragraph(rec)
+        
+        # Full Coverage Case
+        if test_coverage_ratio == 1.0:
+            self._add_title("Full Test Coverage", "SubsectionTitle")
+            self._add_paragraph(
+                "Excellent! Full test coverage achieved with 100% of files having associated tests. "
+                "This level of coverage significantly reduces the risk of regressions."
+            )
+            next_steps = [
+                "• Ensure thorough testing of new code additions",
+                "• Consider adding integration and end-to-end tests",
+                "• Review test quality and coverage of edge cases",
+                "• Monitor test execution times and maintain efficiency",
+                "• Keep test suites up to date with requirements"
+            ]
+            for step in next_steps:
+                self._add_paragraph(step)
         
         # Files Lacking Tests
         if total_files - files_with_tests > 0:
@@ -1607,6 +1820,11 @@ class CodeMetricsPDFGenerator:
                     table_style.add('TEXTCOLOR', (2, i), (2, i), color)
                 
                 self._add_table(untested_data, colWidths=[3*inch, inch, inch], style=table_style)
+                
+                self._add_paragraph(
+                    "\nThe above files have high complexity but no associated tests. "
+                    "These should be prioritized for test coverage to reduce risk."
+                )
         
         # Code Quality Patterns
         self._add_title("Code Quality Patterns", "SubsectionTitle")
@@ -1714,4 +1932,7 @@ class CodeMetricsPDFGenerator:
             for rec in recommendations:
                 self._add_paragraph(rec)
         else:
-            self._add_paragraph("No specific testing recommendations at this time.")
+            self._add_paragraph(
+                "Current testing practices appear effective. Continue maintaining high "
+                "standards and expanding test coverage as new code is added."
+            )

@@ -878,12 +878,15 @@ class TestComplexitySection:
         pdf_generator._generate_complexity_section(metrics)
         
         # Verify recommendations
-        paragraphs = [str(item) for item in pdf_generator.story if isinstance(item, Paragraph)]
-        recommendations = [p for p in paragraphs if 'recommend' in p.lower()]
-        assert len(recommendations) > 0
-        
-        # Check specific recommendations
+        paragraphs = [p for p in pdf_generator.story if isinstance(p, Paragraph)]
+        recommendations = []
+        for p in paragraphs:
+            if hasattr(p, 'text'):  # Get the actual text content
+                if isinstance(p.text, str):
+                    recommendations.append(p.text)
+                    
         recommendation_text = ' '.join(recommendations)
+        assert len(recommendations) > 0
         assert 'complex' in recommendation_text.lower()
         assert 'nest' in recommendation_text.lower()
         
