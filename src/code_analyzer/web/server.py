@@ -14,7 +14,7 @@ import json
 import uvicorn
 
 from code_analyzer.analyzers import CodebaseAnalyzer
-from code_analyzer.reporters import PDFReportGenerator, CodeMetricsPDFGenerator
+from code_analyzer.reporters import CodeMetricsPDFGenerator
 from code_analyzer.ml import DeploymentMLSystem
 
 # Configure logging
