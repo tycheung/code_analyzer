@@ -292,7 +292,7 @@ Current version: 0.1.0
 - [ ] Real-time Analysis
 - [ ] Plugin System
 
-## Future Improvements on Deck  
+## Roadmap and Future Features
 
 ### Enhanced ML Analysis with Bayesian Methods  
 
