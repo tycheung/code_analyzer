@@ -1,6 +1,31 @@
 # Code Quality Analyzer
 
-A tool for analyzing code quality, complexity, and maintainability of GitHub repositories, powered by FastAPI and modern Python async capabilities. This project is for fun/personal use and in alpha stage, there may be incompatibilities.
+A comprehensive static code analysis tool that helps development teams maintain high code quality and optimize deployment strategies. It analyzes GitHub repositories to provide insights about code complexity, security vulnerabilities, architectural issues, and potential deployment risks. This project is for fun/personal use and in alpha stage, there may be incompatibilities.
+
+## What it Does
+
+The Code Quality Analyzer helps you:
+- Identify code quality issues before they become problems
+- Make data-driven deployment decisions
+- Track code health over time
+- Optimize team resources and deployment timing
+- Predict and prevent potential deployment issues
+- Monitor test coverage and trends
+
+Perfect for:
+- Development teams wanting to maintain code quality
+- DevOps engineers planning deployments
+- Team leads making resource allocation decisions
+- Organizations tracking code health metrics
+- CI/CD pipeline quality checks
+
+## Key Benefits
+
+- **Comprehensive Analysis**: Get deep insights into code quality, complexity, and potential issues
+- **Deployment Optimization**: Use ML-based analysis to choose the best deployment times and resource allocation
+- **Historical Tracking**: Monitor how your codebase evolves over time
+- **Team Efficiency**: Make informed decisions about team resources and deployment timing
+- **Easy Integration**: Works with major CI/CD platforms and development workflows
 
 ## Features
 
