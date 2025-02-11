@@ -1,6 +1,6 @@
 # CI/CD Integration Guide
 
-This guide explains how to integrate the Code Quality Analyzer into your CI/CD pipelines for automated code quality checks. This project is for fun/personal use and in alpha stage, there may be incompatibilities.
+This guide explains how to integrate the Code Quality Analyzer into your CI/CD pipelines for automated code quality checks.
 
 ## Overview
 
