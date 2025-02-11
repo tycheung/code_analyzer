@@ -329,3 +329,20 @@ To enhance usability, integrations such as **calendar integrations** are being c
 - **Seamless coordination** with tools like Google Calendar, Outlook, or Slack for real-time notifications.  
 
 These enhancements aim to make the system more intuitive and practical for engineering teams managing complex deployments.
+
+### Dockerizing for Compatibility
+
+To ensure seamless deployment and cross-platform compatibility, containerizing the Code Quality Analyzer using Docker is a priority. This approach will provide:
+
+- **Consistent Environment**: Eliminates “works on my machine” issues by packaging dependencies and runtime configurations.
+- **Easy Deployment**: Simplifies setup across different systems, whether on local machines, CI/CD pipelines, or cloud environments.
+- **Scalability**: Allows multiple instances to run in parallel for large-scale analysis.
+- **Better Isolation**: Ensures that the application runs independently without interfering with system-wide dependencies.
+
+### Planned Docker Setup
+
+- **Base Image**: Use a lightweight Python image (e.g., python:3.9-slim) to optimize container size.
+- **Multi-Stage Build**: Separate dependency installation and final runtime to reduce image bloat.
+- **Preloaded Dependencies**: Install ML libraries, Git tools, and necessary system packages within the container.
+- **Volume Mounts**: Enable local persistence for caching analysis results and reports.
+- **CI/CD Integration**: Include Docker support in GitHub Actions for automated testing and deployment.
