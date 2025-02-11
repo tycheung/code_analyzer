@@ -292,22 +292,40 @@ Current version: 0.1.0
 - [ ] Real-time Analysis
 - [ ] Plugin System
 
-## Coming Soon
+## Future Improvements on Deck  
 
-### Enhanced ML Analysis with Bayesian Methods
+### Enhanced ML Analysis with Bayesian Methods  
 
-Next major upgrade to our ML analysis system will use Bayesian statistical methods to provide more accurate and personalized deployment predictions. This new approach will:
+The next major upgrade to our ML analysis system will incorporate Bayesian statistical methods to provide more accurate and personalized deployment predictions. This new approach will:  
 
-- **Learn from Experience**: Build personalized models for each team member based on their deployment history and expertise
-- **Handle Uncertainty Better**: Provide confidence ranges for predictions instead of single-point estimates
-- **Adapt to Team Dynamics**: Automatically adjust to changing team patterns and relationships
-- **Make Better Use of Limited Data**: Start making useful predictions even with limited historical data
-- **Give More Nuanced Insights**: Account for complex relationships between team members, components, and deployment timing
+- **Learn from Experience**: Build personalized models for each team member based on their deployment history and expertise.  
+- **Handle Uncertainty Better**: Provide confidence ranges for predictions instead of single-point estimates.  
+- **Adapt to Team Dynamics**: Automatically adjust to changing team patterns and relationships.  
+- **Make Better Use of Limited Data**: Start making useful predictions even with limited historical data.  
+- **Give More Nuanced Insights**: Account for complex relationships between team members, components, and deployment timing.  
 
-The new system will allow teams to:
-- Get more accurate deployment window recommendations
-- Better understand prediction confidence
-- See how different team combinations affect success probability
-- Track how deployment success patterns evolve over time
+The new system will allow teams to:  
+- Get more accurate deployment window recommendations.  
+- Better understand prediction confidence.  
+- See how different team combinations affect success probability.  
+- Track how deployment success patterns evolve over time.  
 
-This update aims to make the deployment recommendations even more useful for real-world development teams. Stay tuned!
+This update aims to make deployment recommendations even more useful for real-world development teams.
+
+### Frontend Improvements  
+
+Currently, the system uses a static HTML page as the frontend. While this provides a simple and lightweight interface, it lacks interactivity and flexibility. Moving to a framework like **React** or **Vue.js** would allow for:  
+
+- A **more dynamic and responsive UI** with real-time updates.  
+- Better **user experience** with interactive dashboards and visualizations.  
+- **Scalability** for future feature expansions, including improved filtering and customization options.  
+
+### Additional Integrations  
+
+To enhance usability, we are also considering things such as **calendar integrations** to better align deployment planning with team member availability. This would allow for:  
+
+- **Automated scheduling** based on team member availability.  
+- **Conflict detection** to avoid deployments during unavailable time slots.  
+- **Seamless coordination** with tools like Google Calendar, Outlook, or Slack for real-time notifications.  
+
+These enhancements aim to make the system more intuitive and practical for engineering teams managing complex deployments.
