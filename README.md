@@ -50,7 +50,7 @@ While tools like SonarQube, CodeClimate, and Codacy excel at traditional code qu
 - Learn from past incidents and recoveries
 
 ### Traditional Quality Metrics
-While focusing on team and deployment aspects, we still provide essential code quality metrics:
+While focusing on team and deployment aspects, this repo still provide essential code quality metrics:
 - Complexity analysis
 - Security scanning
 - Architecture evaluation
@@ -104,7 +104,7 @@ poetry run code_analyzer-web
 
 Visit `http://localhost:8000/docs` for interactive API documentation.
 
-For detailed installation instructions, see our [Installation Guide](docs/installation.md).
+For detailed installation instructions, see the [Installation Guide](docs/installation.md).
 
 ## Usage
 
@@ -178,7 +178,7 @@ async def analyze_repo():
 asyncio.run(analyze_repo())
 ```
 
-For complete usage instructions, see our [Usage Guide](docs/usage.md).
+For complete usage instructions, see the [Usage Guide](docs/usage.md).
 
 ## Documentation
 
@@ -233,7 +233,7 @@ jobs:
              poetry run python ci/analyze.py
 ```
 
-For more integration examples, see our [CI/CD Guide](docs/ci_cd.md).
+For more integration examples, see the [CI/CD Guide](docs/ci_cd.md).
 
 ## Development
 
@@ -296,7 +296,7 @@ Current version: 0.1.0
 
 ### Enhanced ML Analysis with Bayesian Methods  
 
-The next major upgrade to our ML analysis system will incorporate Bayesian statistical methods to provide more accurate and personalized deployment predictions. This new approach will:  
+The next major upgrade to the ML analysis system will incorporate Bayesian statistical methods to provide more accurate and personalized deployment predictions. This new approach will:  
 
 - **Learn from Experience**: Build personalized models for each team member based on their deployment history and expertise.  
 - **Handle Uncertainty Better**: Provide confidence ranges for predictions instead of single-point estimates.  
@@ -322,7 +322,7 @@ Currently, the system uses a static HTML page as the frontend. While this provid
 
 ### Additional Integrations  
 
-To enhance usability, we are also considering things such as **calendar integrations** to better align deployment planning with team member availability. This would allow for:  
+To enhance usability, integrations such as **calendar integrations** are being considered to better align deployment planning with team member availability. This would allow for:  
 
 - **Automated scheduling** based on team member availability.  
 - **Conflict detection** to avoid deployments during unavailable time slots.  
