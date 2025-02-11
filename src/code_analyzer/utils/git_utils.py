@@ -18,12 +18,23 @@ class GitAnalyzer:
     def clone_repository(self, repo_url: str, target_dir: str) -> str:
         """Clone a git repository to the target directory."""
         try:
+            print(f"\nDEBUG GitAnalyzer: Starting clone of {repo_url} to {target_dir}")
+            print(f"DEBUG GitAnalyzer: Target dir exists: {os.path.exists(target_dir)}")
+            
             if not os.path.exists(target_dir):
-                print(f"Cloning repository from {repo_url}...")
+                print("DEBUG GitAnalyzer: Directory doesn't exist, proceeding with clone")
                 git.Repo.clone_from(repo_url, target_dir)
+                print("DEBUG GitAnalyzer: Clone completed")
+            else:
+                print("DEBUG GitAnalyzer: Directory exists, skipping clone")
+                
             return target_dir
         except git.exc.GitCommandError as e:
+            print(f"DEBUG GitAnalyzer: GitCommandError caught: {str(e)}")
             raise Exception(f"Failed to clone repository: {e}")
+        except Exception as e:
+            print(f"DEBUG GitAnalyzer: Unexpected error: {type(e)}, {str(e)}")
+            raise
 
     def cleanup_repository(self, target_dir: str) -> None:
         """Remove the cloned repository directory."""
