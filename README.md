@@ -258,3 +258,23 @@ Current version: 0.1.0
 - [x] Historical Trends
 - [ ] Real-time Analysis
 - [ ] Plugin System
+
+## Coming Soon
+
+### Enhanced ML Analysis with Bayesian Methods
+
+Next major upgrade to our ML analysis system will use Bayesian statistical methods to provide more accurate and personalized deployment predictions. This new approach will:
+
+- **Learn from Experience**: Build personalized models for each team member based on their deployment history and expertise
+- **Handle Uncertainty Better**: Provide confidence ranges for predictions instead of single-point estimates
+- **Adapt to Team Dynamics**: Automatically adjust to changing team patterns and relationships
+- **Make Better Use of Limited Data**: Start making useful predictions even with limited historical data
+- **Give More Nuanced Insights**: Account for complex relationships between team members, components, and deployment timing
+
+The new system will allow teams to:
+- Get more accurate deployment window recommendations
+- Better understand prediction confidence
+- See how different team combinations affect success probability
+- Track how deployment success patterns evolve over time
+
+This update aims to make the deployment recommendations even more useful for real-world development teams. Stay tuned!
