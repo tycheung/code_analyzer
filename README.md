@@ -1,6 +1,6 @@
 # Code Quality Analyzer
 
-A tool for analyzing code quality, complexity, and maintainability of GitHub repositories, powered by FastAPI and modern Python async capabilities. Currently only tested on a Windows machine, but should work on other platforms.
+A tool for analyzing code quality, complexity, and maintainability of GitHub repositories, powered by FastAPI and modern Python async capabilities.
 
 ## Features
 
@@ -10,8 +10,11 @@ A tool for analyzing code quality, complexity, and maintainability of GitHub rep
   - Architecture analysis
   - Code duplication detection
   - Change probability analysis
+  - Test coverage analysis
+  - Historical trend analysis
 - Git history analysis
-- PDF report generation
+- Enhanced PDF report generation
+- Machine learning-based deployment analysis
 - Support for multiple programming languages
 - Detailed metrics and recommendations
 - Modern FastAPI-based web interface
@@ -26,7 +29,7 @@ A tool for analyzing code quality, complexity, and maintainability of GitHub rep
 - Python 3.9 or higher
 - Poetry (dependency management)
 - Git
-- LaTeX (for PDF report generation)
+- 4GB RAM minimum (8GB recommended)
 
 ```bash
 # Install Poetry
@@ -53,8 +56,11 @@ For detailed installation instructions, see our [Installation Guide](docs/instal
 # Basic analysis
 poetry run code_analyzer https://github.com/username/repo
 
-# Generate PDF report
-poetry run code_analyzer https://github.com/username/repo --generate-pdf
+# Generate PDF report with all features
+poetry run code_analyzer https://github.com/username/repo \
+    --generate-pdf \
+    --include-test-analysis \
+    --include-trends
 
 # Full analysis with all options
 poetry run code_analyzer https://github.com/username/repo \
@@ -63,6 +69,8 @@ poetry run code_analyzer https://github.com/username/repo \
     --pdf-output ./reports \
     --export-json \
     --min-duplicate-lines 10 \
+    --trend-window 6months \
+    --trend-granularity weekly \
     --verbose
 ```
 
@@ -93,7 +101,16 @@ async def analyze_repo():
                 'repoUrl': 'https://github.com/username/repo',
                 'options': {
                     'generatePdf': True,
-                    'exportJson': True
+                    'exportJson': True,
+                    'includeTestAnalysis': True,
+                    'includeTrends': True,
+                    'mlAnalysis': {
+                        'enabled': True,
+                        'teamAvailability': {
+                            'developer1': [['09:00', '17:00']]
+                        },
+                        'generateHistoricalTrends': True
+                    }
                 }
             }
         ) as response:
@@ -109,10 +126,10 @@ For complete usage instructions, see our [Usage Guide](docs/usage.md).
 
 - [Installation Guide](docs/installation.md) - Detailed setup instructions
 - [Usage Guide](docs/usage.md) - Complete usage documentation
-- [API Reference](docs/api.md) - FastAPI endpoints and models COMING SOON
+- [API Reference](docs/api.md) - FastAPI endpoints and models
 - [Comparative Analysis Guide](docs/comparative_analysis.md) - Advanced comparison features
 - [Metrics Documentation](docs/metrics_explanation.md) - Available metrics and their meaning
-- [Contributing Guide](CONTRIBUTING.md) - How to contribute to the project COMING SOON
+- [ML Analysis Guide](docs/ml_analysis.md) - Machine learning features
 
 ## Architecture
 
@@ -123,7 +140,9 @@ The analyzer is built with modern Python practices and tools:
 - **async/await** - Asynchronous operations throughout
 - **Pydantic** - Data validation using Python type annotations
 - **GitPython** - Git repository interaction
-- **PyLaTeX** - PDF report generation
+- **ReportLab** - PDF report generation
+- **recharts** - Interactive data visualization
+- **Machine Learning** - Statistical analysis for deployment optimization
 
 ## CI/CD Integration
 
@@ -156,7 +175,7 @@ jobs:
              poetry run python ci/analyze.py
 ```
 
-For more integration examples, see our [CI/CD Guide](docs/ci_cd.md) COMING SOON.
+For more integration examples, see our [CI/CD Guide](docs/ci_cd.md).
 
 ## Development
 
@@ -164,7 +183,7 @@ For more integration examples, see our [CI/CD Guide](docs/ci_cd.md) COMING SOON.
 
 ```bash
 # Install with development dependencies
-poetry install --with dev,docs
+poetry install --with dev,docs,ml
 
 # Install pre-commit hooks
 poetry run pre-commit install
@@ -189,16 +208,6 @@ poetry run pytest --cov=code_analyzer
 poetry run pytest -m "not integration"
 ```
 
-## Contributing COMING SOON
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
-
-- Code of conduct
-- Development process
-- Pull request procedure
-- Coding standards
-- Testing requirements
-
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -208,6 +217,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Built with [FastAPI](https://fastapi.tiangolo.com/)
 - Package management by [Poetry](https://python-poetry.org/)
 - Documentation built with [Sphinx](https://www.sphinx-doc.org/)
+- Visualizations powered by [recharts](https://recharts.org/)
 
 ## Project Status
 
@@ -218,12 +228,8 @@ Current version: 0.1.0
 - [x] Basic Analysis
 - [x] PDF Reports
 - [x] Comparative Analysis
-- [ ] Machine Learning Integration
+- [x] Machine Learning Integration
+- [x] Test Coverage Analysis
+- [x] Historical Trends
 - [ ] Real-time Analysis
 - [ ] Plugin System
-
-## Support
-
-- Open an issue on GitHub
-- Check our [FAQ](docs/faq.md) COMING SOON
-- Read the [Troubleshooting Guide](docs/troubleshooting.md) COMING SOON

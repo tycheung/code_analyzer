@@ -417,6 +417,55 @@
             height: 400px;
             margin-top: 1rem;
         }
+
+        .analysis-section {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background-color: var(--light-bg);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .metric-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+        }
+
+        .metric-content {
+            margin-top: 1rem;
+        }
+
+        .chart-container {
+            height: 300px;
+            margin-top: 1rem;
+        }
+
+        .table-container {
+            margin-top: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .trend-preferences {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: white;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+        }
+
+        .historical-analysis {
+            margin-top: 1.5rem;
+        }
     </style>
 
     <body>
@@ -438,6 +487,24 @@
             <div class="form-group">
                 <label for="min-lines">Minimum Duplicate Lines</label>
                 <input type="number" id="min-lines" value="6" min="3">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <h3>Additional Analysis Options</h3>
+            <div class="options-grid">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="include-test-analysis" checked>
+                    <label for="include-test-analysis">Include Test Analysis</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="include-trends" checked>
+                    <label for="include-trends">Include Trend Analysis</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="export-comparison" checked>
+                    <label for="export-comparison">Export Comparison Results</label>
+                </div>
             </div>
         </div>
 
@@ -611,6 +678,41 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="historical-analysis">
+                    <h4>Historical Analysis</h4>
+                    <div class="checkbox-grid">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="generate-historical-trends" checked>
+                            <label for="generate-historical-trends">Generate Historical Trends</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="analyze-pattern-evolution" checked>
+                            <label for="analyze-pattern-evolution">Analyze Pattern Evolution</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="trend-preferences">
+                    <h4>Trend Analysis Preferences</h4>
+                    <div class="form-group">
+                        <label for="trend-window">Analysis Window:</label>
+                        <select id="trend-window" class="form-select">
+                            <option value="1month">Last Month</option>
+                            <option value="3months">Last 3 Months</option>
+                            <option value="6months">Last 6 Months</option>
+                            <option value="1year">Last Year</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="trend-granularity">Data Granularity:</label>
+                        <select id="trend-granularity" class="form-select">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                        </select>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -680,6 +782,48 @@
                 <div class="charts-container">
                     <h4>Metrics Visualization</h4>
                     <div id="metrics-chart" class="chart"></div>
+                </div>
+            </div>
+
+            <div id="test-analysis-results" class="analysis-section">
+                <h3>Test Coverage Analysis</h3>
+                <div class="metric-grid">
+                    <div class="metric-card">
+                        <h4>Coverage Overview</h4>
+                        <div id="coverage-summary" class="metric-content"></div>
+                    </div>
+                    <div class="metric-card">
+                        <h4>Test Distribution</h4>
+                        <div id="test-distribution" class="chart-container"></div>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <h4>Untested Components</h4>
+                    <div id="untested-files" class="table-container"></div>
+                </div>
+            </div>
+
+            <div id="trends-analysis-results" class="analysis-section">
+                <h3>Historical Trends Analysis</h3>
+                <div class="metric-grid">
+                    <div class="metric-card">
+                        <h4>Complexity Evolution</h4>
+                        <div id="complexity-trends" class="chart-container"></div>
+                    </div>
+                    <div class="metric-card">
+                        <h4>Code Growth</h4>
+                        <div id="size-trends" class="chart-container"></div>
+                    </div>
+                </div>
+                <div class="metric-grid">
+                    <div class="metric-card">
+                        <h4>Issue Trends</h4>
+                        <div id="issue-trends" class="chart-container"></div>
+                    </div>
+                    <div class="metric-card">
+                        <h4>Pattern Evolution</h4>
+                        <div id="pattern-trends" class="chart-container"></div>
+                    </div>
                 </div>
             </div>
 
@@ -1523,6 +1667,191 @@
             // Add initial team member
             addTeamMember();
         });
+
+        function collectAnalysisOptions() {
+            return {
+                verbose: document.getElementById('verbose').checked,
+                generatePdf: document.getElementById('generate-pdf').checked,
+                exportJson: document.getElementById('export-json').checked,
+                minLines: parseInt(document.getElementById('min-lines').value),
+                comparison: collectComparisonOptions(),
+                mlAnalysis: collectMLOptions(),
+                includeTestAnalysis: document.getElementById('include-test-analysis').checked,
+                includeTrends: document.getElementById('include-trends').checked
+            };
+        }
+
+        // Add new display functions
+        function displayTestAnalysisResults(results) {
+            const testResults = document.getElementById('test-analysis-results');
+            if (!results.testAnalysis) {
+                testResults.style.display = 'none';
+                return;
+            }
+
+            testResults.style.display = 'block';
+            
+            // Display coverage summary
+            const summary = document.getElementById('coverage-summary');
+            summary.innerHTML = `
+                <div class="coverage-stats">
+                    <div>Total Files: ${results.testAnalysis.totalFiles}</div>
+                    <div>Files with Tests: ${results.testAnalysis.filesWithTests}</div>
+                    <div>Coverage Ratio: ${(results.testAnalysis.coverageRatio * 100).toFixed(1)}%</div>
+                </div>
+            `;
+
+            // Create test distribution chart
+            const distribution = document.getElementById('test-distribution');
+            const distributionChart = new Chart(distribution, {
+                type: 'pie',
+                data: {
+                    labels: ['Files with Tests', 'Files without Tests'],
+                    datasets: [{
+                        data: [
+                            results.testAnalysis.filesWithTests,
+                            results.testAnalysis.totalFiles - results.testAnalysis.filesWithTests
+                        ],
+                        backgroundColor: [
+                            'rgba(46, 204, 113, 0.8)',
+                            'rgba(231, 76, 60, 0.8)'
+                        ]
+                    }]
+                }
+            });
+
+            // Display untested files table
+            const untestedFiles = document.getElementById('untested-files');
+            if (results.testAnalysis.untestedFiles && results.testAnalysis.untestedFiles.length > 0) {
+                const table = createTable(
+                    ['File', 'Complexity', 'Risk Level'],
+                    results.testAnalysis.untestedFiles.map(file => [
+                        file.name,
+                        file.complexity.toString(),
+                        getRiskLevel(file.complexity)
+                    ])
+                );
+                untestedFiles.innerHTML = '';
+                untestedFiles.appendChild(table);
+            }
+        }
+
+        function displayTrendsAnalysisResults(results) {
+            const trendsResults = document.getElementById('trends-analysis-results');
+            if (!results.trends) {
+                trendsResults.style.display = 'none';
+                return;
+            }
+
+            trendsResults.style.display = 'block';
+
+            // Create complexity trends chart
+            createTrendChart(
+                'complexity-trends',
+                results.trends.timeline,
+                results.trends.complexity,
+                'Complexity Evolution',
+                'rgba(52, 152, 219, 0.8)'
+            );
+
+            // Create size trends chart
+            createTrendChart(
+                'size-trends',
+                results.trends.timeline,
+                results.trends.size,
+                'Code Size Evolution',
+                'rgba(46, 204, 113, 0.8)'
+            );
+
+            // Create issue trends chart
+            createTrendChart(
+                'issue-trends',
+                results.trends.timeline,
+                results.trends.issues,
+                'Issue Evolution',
+                'rgba(231, 76, 60, 0.8)'
+            );
+
+            // Create pattern trends chart
+            if (results.trends.patterns) {
+                createTrendChart(
+                    'pattern-trends',
+                    results.trends.timeline,
+                    results.trends.patterns,
+                    'Pattern Evolution',
+                    'rgba(241, 196, 15, 0.8)'
+                );
+            }
+        }
+
+        function createTrendChart(elementId, labels, data, label, color) {
+            const ctx = document.getElementById(elementId);
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: label,
+                        data: data,
+                        borderColor: color,
+                        backgroundColor: color.replace('0.8', '0.2'),
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'day'
+                            }
+                        },
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function createTable(headers, data) {
+            const table = document.createElement('table');
+            table.className = 'table';
+            
+            // Create header
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            headers.forEach(header => {
+                const th = document.createElement('th');
+                th.textContent = header;
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+            
+            // Create body
+            const tbody = document.createElement('tbody');
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                row.forEach(cell => {
+                    const td = document.createElement('td');
+                    td.textContent = cell;
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+            table.appendChild(tbody);
+            
+            return table;
+        }
+
+        function getRiskLevel(complexity) {
+            if (complexity > 20) return 'High';
+            if (complexity > 10) return 'Medium';
+            return 'Low';
+        }
     </script>
 </body>
 </html>

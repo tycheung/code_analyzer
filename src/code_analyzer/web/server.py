@@ -14,10 +14,10 @@ import json
 import uvicorn
 
 from code_analyzer.analyzers import CodebaseAnalyzer
-from code_analyzer.reporters import PDFReportGenerator
-from code_analyzer.ml import DeploymentMLSystem  # New import
+from code_analyzer.reporters import PDFReportGenerator, CodeMetricsPDFGenerator
+from code_analyzer.ml import DeploymentMLSystem
 
-# Configure logging [unchanged]
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -30,7 +30,7 @@ app = FastAPI(
     version="0.1.0"
 )
 
-# Add CORS middleware [unchanged]
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -39,7 +39,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files directory [unchanged]
+# Mount static files directory
 static_dir = Path(__file__).parent / 'static'
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
@@ -55,6 +55,7 @@ class MLAnalysisOptions(BaseModel):
     analyzeResourceRequirements: bool = True
     analyzeRollbackRisks: bool = True
     analyzeIncidentPrediction: bool = True
+    generateHistoricalTrends: bool = True
 
 class ComparisonOptions(BaseModel):
     enabled: bool = False
@@ -69,6 +70,8 @@ class AnalysisOptions(BaseModel):
     minLines: Optional[int] = None
     comparison: ComparisonOptions = Field(default_factory=ComparisonOptions)
     mlAnalysis: Optional[MLAnalysisOptions] = None
+    includeTestAnalysis: bool = True
+    includeTrends: bool = True
 
 class AnalysisRequest(BaseModel):
     repoUrl: str
@@ -76,7 +79,7 @@ class AnalysisRequest(BaseModel):
 
 class ComparisonAnalyzer:
     """Handles different types of comparative analysis."""
-
+    
     @staticmethod
     async def compare_directories(analyzer: CodebaseAnalyzer, dir1: str, dir2: str, 
                                 metrics_to_compare: List[str]) -> Dict:
@@ -172,7 +175,7 @@ class ComparisonAnalyzer:
         return trends
 
 async def analyze_repository(request_data: AnalysisRequest, temp_dir: str) -> Dict[str, Any]:
-    """Analyze the repository and return results."""
+    """Enhanced repository analysis function."""
     log_file = os.path.join(temp_dir, 'analysis.log')
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(logging.Formatter(
@@ -196,42 +199,23 @@ async def analyze_repository(request_data: AnalysisRequest, temp_dir: str) -> Di
         logger.info(f"Starting analysis of {request_data.repoUrl}")
         logger.debug(f"Options: {request_data.options.model_dump_json(indent=2)}")
 
+        # Clone and analyze repository
         await analyzer.clone_repo(request_data.repoUrl, repo_dir)
         await analyzer.analyze_git_history(repo_dir)
         
         if request_data.options.minLines:
             analyzer.code_duplication.min_lines = request_data.options.minLines
-        
+
+        # Perform comparative analysis if enabled
         comparison_results = None
         if request_data.options.comparison.enabled:
-            comparison_type = request_data.options.comparison.type
-            comparison_options = request_data.options.comparison.options
-            metrics_to_compare = request_data.options.comparison.metrics
-            
-            if comparison_type == 'directory':
-                comparison_results = await ComparisonAnalyzer.compare_directories(
-                    analyzer,
-                    os.path.join(repo_dir, comparison_options['dir1']),
-                    os.path.join(repo_dir, comparison_options['dir2']),
-                    metrics_to_compare
-                )
-            elif comparison_type == 'snapshot':
-                comparison_results = await ComparisonAnalyzer.compare_snapshots(
-                    analyzer,
-                    repo_dir,
-                    comparison_options['baseline'],
-                    comparison_options['target'],
-                    comparison_options.get('component')
-                )
-            elif comparison_type == 'historical':
-                comparison_results = await ComparisonAnalyzer.analyze_historical_trends(
-                    analyzer,
-                    repo_dir,
-                    comparison_options['startDate'],
-                    comparison_options['endDate'],
-                    comparison_options['interval']
-                )
-        
+            comparison_results = await perform_comparison_analysis(
+                analyzer, 
+                repo_dir, 
+                request_data.options.comparison
+            )
+
+        # Scan codebase
         await analyzer.scan_directory(repo_dir)
         
         results = {
@@ -247,12 +231,34 @@ async def analyze_repository(request_data: AnalysisRequest, temp_dir: str) -> Di
                 json.dump(comparison_results, f, indent=2)
             results['comparisonReportPath'] = comparison_report_path
 
+        # Generate PDF report with enhanced metrics
+        if request_data.options.generatePdf:
+            pdf_dir = os.path.join(output_dir, "pdf")
+            os.makedirs(pdf_dir, exist_ok=True)
+            
+            logger.info("Generating enhanced PDF report")
+            pdf_generator = CodeMetricsPDFGenerator(
+                os.path.join(pdf_dir, "report.pdf")
+            )
+            
+            # Collect all metrics for PDF generation
+            metrics_data = {
+                'code_metrics': await analyzer.get_metrics(),
+                'test_coverage': await analyzer.get_test_coverage() if request_data.options.includeTestAnalysis else None,
+                'trends': await analyzer.get_historical_trends() if request_data.options.includeTrends else None,
+                'deployment_analysis': results.get('mlAnalysis') if ml_system else None,
+                'comparison_results': comparison_results
+            }
+            
+            pdf_generator.generate_pdf(metrics_data)
+            results['pdfPath'] = os.path.join(pdf_dir, "report.pdf")
+
         # Add ML analysis results if enabled
         if ml_system and request_data.options.mlAnalysis:
             logger.info("Performing ML-based deployment analysis")
             ml_options = request_data.options.mlAnalysis
             
-            # Convert team availability times to datetime.time objects
+            # Convert team availability times
             team_availability = {}
             for name, hours in ml_options.teamAvailability.items():
                 team_availability[name] = [
@@ -263,57 +269,20 @@ async def analyze_repository(request_data: AnalysisRequest, temp_dir: str) -> Di
             
             ml_results = ml_system.analyze_deployment(
                 analyzer.stats,
-                team_availability
+                team_availability,
+                include_historical=ml_options.generateHistoricalTrends
             )
             
             results['mlAnalysis'] = ml_results
             logger.info("ML analysis completed")
 
-            # Generate PDF with ML insights
-            if request_data.options.generatePdf:
-                pdf_dir = os.path.join(output_dir, "pdf")
-                os.makedirs(pdf_dir, exist_ok=True)
-                
-                logger.info("Generating PDF report with ML insights")
-                report_generator = PDFReportGenerator(ml_system=ml_system)
-                await report_generator.generate_pdf(
-                    analyzer.stats,
-                    request_data.repoUrl,
-                    pdf_dir,
-                    comparison_results
-                )
-                
-                pdf_path = os.path.join(pdf_dir, "report.pdf")
-                if os.path.exists(pdf_path):
-                    results['pdfPath'] = pdf_path
-                    logger.info(f"PDF report generated: {pdf_path}")
-
-        # Generate standard PDF if ML is not enabled
-        elif request_data.options.generatePdf:
-            pdf_dir = os.path.join(output_dir, "pdf")
-            os.makedirs(pdf_dir, exist_ok=True)
-            
-            logger.info("Generating PDF report")
-            report_generator = PDFReportGenerator()
-            await report_generator.generate_pdf(
-                analyzer.stats,
-                request_data.repoUrl,
-                pdf_dir,
-                comparison_results
-            )
-            
-            pdf_path = os.path.join(pdf_dir, "report.pdf")
-            if os.path.exists(pdf_path):
-                results['pdfPath'] = pdf_path
-                logger.info(f"PDF report generated: {pdf_path}")
-
+        # Export JSON metrics if requested
         if request_data.options.exportJson:
             json_path = os.path.join(output_dir, "metrics.json")
             metrics = await analyzer.get_metrics()
             with open(json_path, 'w') as f:
                 json.dump(metrics, f, indent=2)
             results['jsonPath'] = json_path
-            logger.info(f"JSON metrics exported: {json_path}")
 
         results['logPath'] = log_file
         logger.info("Analysis completed successfully")
@@ -324,6 +293,39 @@ async def analyze_repository(request_data: AnalysisRequest, temp_dir: str) -> Di
         raise
     finally:
         logger.removeHandler(file_handler)
+
+async def perform_comparison_analysis(analyzer: CodebaseAnalyzer, repo_dir: str, 
+                                   comparison_options: ComparisonOptions) -> Dict:
+    """Handle different types of comparative analysis."""
+    comparison_type = comparison_options.type
+    options = comparison_options.options
+    metrics = comparison_options.metrics
+    
+    if comparison_type == 'directory':
+        return await ComparisonAnalyzer.compare_directories(
+            analyzer,
+            os.path.join(repo_dir, options['dir1']),
+            os.path.join(repo_dir, options['dir2']),
+            metrics
+        )
+    elif comparison_type == 'snapshot':
+        return await ComparisonAnalyzer.compare_snapshots(
+            analyzer,
+            repo_dir,
+            options['baseline'],
+            options['target'],
+            options.get('component')
+        )
+    elif comparison_type == 'historical':
+        return await ComparisonAnalyzer.analyze_historical_trends(
+            analyzer,
+            repo_dir,
+            options['startDate'],
+            options['endDate'],
+            options['interval']
+        )
+    else:
+        raise ValueError(f"Unsupported comparison type: {comparison_type}")
 
 @app.post("/analyze")
 async def analyze(request: AnalysisRequest, background_tasks: BackgroundTasks):
