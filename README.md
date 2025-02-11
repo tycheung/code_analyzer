@@ -56,7 +56,7 @@ While focusing on team and deployment aspects, we still provide essential code q
 - Architecture evaluation
 - Test coverage tracking
 
-The key difference is that these metrics are analyzed in the context of team dynamics and deployment success, not just as standalone indicators.
+The key difference is that these metrics are analyzed in the context of team dynamics and deployment success, not just as standalone indicators. This tool is designed to assist in decision-making and foster collaboration. It serves as a guiding framework rather than a rigid, step-by-step directive. Users should interpret its output with discernment and avoid over-reliance. Always consider additional context and perspectives when making decisions.
 
 ## Features
 
